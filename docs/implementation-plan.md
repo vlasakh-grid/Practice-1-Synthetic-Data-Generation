@@ -13,7 +13,9 @@ Build a Dockerized conversational data assistant that generates synthetic data f
 ## Subtasks
 
 1. **Prepare the environment**
-   - Set up the Python project, Docker Compose, local PostgreSQL, and environment variables.
+   - Set up the Python project, Docker Compose, and a PostgreSQL container with persistent local storage.
+   - Configure the application to connect to PostgreSQL through environment variables and the Docker service name.
+   - Do not require a separate PostgreSQL installation on the host machine.
    - Add reproducible startup instructions for Docker Desktop.
 
 2. **Configure Gemini and Langfuse**
