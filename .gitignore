@@ -1,6 +1,7 @@
 # Default ignored files
 /.idea/
 .env
+.venv/
 __pycache__/
 .pytest_cache/
 .streamlit/secrets.toml
