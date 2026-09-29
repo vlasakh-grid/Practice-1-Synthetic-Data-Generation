@@ -2,77 +2,89 @@
 
 ## Goal
 
-Build a Dockerized conversational data assistant that generates synthetic data from the provided DDL schemas and lets the user analyze the current dataset through a chat interface.
+Build a Dockerized conversational data assistant that generates valid synthetic data from provided DDL schemas and lets the user analyze the current dataset through a chat interface.
 
-## Status
+## Delivery Principle
 
-- [ ] Not started
-- [ ] In progress
-- [ ] Completed
+Every stage must add a user-visible capability that can be manually verified in a locally running Streamlit application. Automated tests and documentation updates are completed within the relevant stage, not deferred to a separate non-functional task.
 
 ## Subtasks
 
-1. **Prepare the environment**
+1. [x] **Prepare the environment**
    - Set up the Python project, Docker Compose, and a PostgreSQL container with persistent local storage.
-   - Configure the application to connect to PostgreSQL through environment variables and the Docker service name.
-   - Do not require a separate PostgreSQL installation on the host machine.
-   - Add reproducible startup instructions for Docker Desktop.
+   - Configure the application to connect to PostgreSQL through environment variables and the Docker service name, without requiring a host PostgreSQL installation.
+   - Document reproducible Docker Desktop startup.
+   - Manual check: start the application and confirm the PostgreSQL connection status in the UI.
 
-2. **Configure Gemini and Langfuse**
-   - Connect to Gemini 2.0 Flash or newer through the Google GenAI SDK and Vertex AI.
-   - Use structured output, streaming, and function calling where appropriate.
-   - Add Langfuse tracing for LLM calls and generation workflows.
+2. [x] **Configure Gemini and Langfuse**
+   - Connect Gemini 2.0 Flash or newer through the Google GenAI SDK and Vertex AI.
+   - Provide structured output, streaming, function calling where appropriate, and Langfuse tracing for LLM workflows.
+   - The first UI diagnostic for these configured integrations is delivered in stage 4.
 
-3. **Implement DDL parsing**
+3. [x] **Implement DDL parsing**
    - Accept `.sql`, `.ddl`, and `.txt` uploads.
-   - Parse tables, columns, data types, nullability, primary keys, foreign keys, unique constraints, checks, defaults, and enum values.
-   - Support the MySQL-like syntax used in the three supplied schemas while producing a PostgreSQL-compatible internal representation.
+   - Parse tables, columns, data types, nullability, primary and foreign keys, unique constraints, checks, defaults, and enum values.
+   - Support the MySQL-like syntax used in all three supplied schemas while producing a PostgreSQL-compatible internal representation.
+   - Manual check: upload any supplied DDL file and inspect its table overview and parsed constraints.
 
-4. **Build the schema dependency model**
-   - Determine a safe generation order from foreign-key relationships.
-   - Handle self-references and circular dependencies such as those in the library schema.
+4. [ ] **Show dependency planning and integration readiness**
+   - Build a foreign-key dependency model with a stable generation order, self-references, and strongly connected components.
+   - After a DDL upload, display generation phases, deferred relationships/cycles, and a safe Gemini/Langfuse readiness diagnostic without exposing secrets.
+   - Manual check: upload all three supplied schemas; verify parent-before-child phases and the explicit `Employees` / `Departments` / `Library_Branches` cycle in the library schema.
 
-5. **Implement synthetic data generation**
-   - Accept a natural-language prompt, model parameters, and rows-per-table.
-   - Generate realistic structured records with Gemini.
-   - Preserve only the constraints explicitly defined by the DDL.
+5. [ ] **Generate a draft dataset and preview it**
+   - Add a natural-language instruction, temperature, max tokens, and rows-per-table controls.
+   - Use Gemini structured output to generate records in dependency phases, show streaming progress, and present an in-memory draft preview per table.
+   - Generate cyclic records and their deferred foreign-key values in separate phases.
+   - Manual check: generate drafts for each supplied schema and switch between table previews.
 
-6. **Validate and persist generated data**
-   - Validate primary keys, foreign keys, unique values, required fields, enum values, and check constraints.
-   - Load valid results into local PostgreSQL running in Docker.
-   - Return actionable validation errors when a generated result is invalid.
+6. [ ] **Validate, persist, and restore a dataset**
+   - Validate explicit primary-key, foreign-key, required-field, unique, enum, and check constraints with errors identifying the table, row, field, and failed rule.
+   - Persist only valid datasets to PostgreSQL transactionally and restore the current dataset from PostgreSQL after an application restart.
+   - Manual check: generate and save a dataset, restart Streamlit, and verify that its data remains available; verify the error presentation for an invalid result.
 
-7. **Build the Data Generation UI**
-   - Reproduce the structure from `task/sample.png`: sidebar navigation, prompt, DDL upload, temperature, max tokens, row count, Generate button, table selector, and preview.
+7. [ ] **Complete the Data Generation workflow UI**
+   - Arrange the existing workflow around the structure in `task/sample.png`: sidebar navigation, DDL upload, prompt, parameters, Generate action, table selector, preview, and current-dataset status.
+   - Preserve the generation and persistence contracts from earlier stages.
+   - Manual check: complete the DDL-upload-to-saved-preview workflow entirely through the target screen.
 
-8. **Add text-based table editing**
-   - Provide quick-edit instructions for the selected table.
-   - Apply the requested change, revalidate the dataset, and refresh the preview.
+8. [ ] **Edit a selected table through text instructions**
+   - Add quick-edit instructions and a Submit action for the selected table.
+   - Apply a Gemini structured change, revalidate the whole dataset, persist it atomically, and refresh the preview.
+   - Manual check: request a change to one table and confirm the changed rows and valid related data.
 
-9. **Add exports**
-   - Download an individual table as CSV.
-   - Download the complete dataset as a ZIP archive containing CSV files.
+9. [ ] **Export the current dataset**
+   - Download the selected persisted table as CSV.
+   - Download the complete persisted dataset as a ZIP archive of CSV files.
+   - Manual check: download both formats, unpack the archive, and compare its tables and rows with the UI.
 
-10. **Build the Talk to your data tab**
-    - Provide a session-only analytical chat over the current generated dataset.
-    - Use Gemini to interpret questions and produce answers based on the available data.
-    - Keep chat history in the current application session; it may disappear after a page reload.
+10. [ ] **Add the Talk to your data tab**
+    - Add session-only chat history and streaming Gemini responses over the current PostgreSQL dataset.
+    - Use function calling only for predefined read-only operations: schema lookup, bounded aggregates, and bounded row retrieval.
+    - Manual check: ask analytical questions after generation and verify answers against the data preview.
 
-11. **Apply chat safety controls**
-    - Restrict database operations to read-only analysis.
-    - Limit result sizes and prevent DDL/DML execution through chat.
-    - Hide credentials and return user-friendly errors.
+11. [ ] **Harden chat safety and complete the demo guide**
+    - Enforce read-only database access, an allowlist of analytical operations, result/time limits, blocked DDL/DML, credential protection, and user-friendly errors.
+    - Add an in-app usage guide and complete the README with Docker Desktop, Vertex AI, Langfuse, and end-to-end demo instructions.
+    - Manual check: confirm a normal analytics question succeeds while data-changing, secret-seeking, and oversized requests are safely rejected without modifying the dataset.
 
-12. **Test and document the project**
-    - Test all three supplied DDL schemas, including foreign keys, unique constraints, check constraints, self-references, and circular references.
-    - Test generation, editing, preview, CSV/ZIP export, and the analytical chat.
-    - Complete the README with setup, configuration, Docker Desktop startup, and demo instructions.
+## Required Progress Log
+
+After completing every stage, update `LOG.md` in the same change with:
+
+- the stage number, title, and completion status;
+- delivered components and changed public interfaces;
+- automated-test results and the exact manual verification scenario;
+- known limitations, configuration requirements, and relevant context for the next agent;
+- the next unfinished stage and its recommended scope.
+
+Before starting a stage, the next agent must read `LOG.md` and this plan, then preserve all previously confirmed manual scenarios unless it re-verifies them.
 
 ## Agreed Defaults
 
-- UI framework: Streamlit or Gradio, selected during implementation based on the simplest reliable integration.
+- UI framework: Streamlit.
 - Database: local PostgreSQL in Docker Desktop; no cloud PostgreSQL is required.
-- Dataset lifetime: available to the running application session and stored in the local PostgreSQL container; chat history is session-only.
-- Input schemas: the three DDL files supplied in `task/` must be supported.
-- Data validation: enforce constraints explicitly present in the DDL; do not invent additional domain rules.
-- UI fidelity: preserve the structure and workflow shown in `task/sample.png`, adapting styling to the selected UI framework.
+- Dataset lifetime: persisted in the local PostgreSQL container; chat history is limited to the current application session.
+- Input schemas: all three DDL files in `task/` must be supported.
+- Data validation: enforce only constraints explicitly present in the DDL; do not invent domain rules.
+- UI fidelity: preserve the workflow shown in `task/sample.png`, adapted to Streamlit.
