@@ -1,0 +1,4 @@
+interface:
+  display_name: "Synthetic Data App Architecture"
+  short_description: "Design a reliable synthetic-data app"
+  default_prompt: "Use $synthetic-data-app-architecture to propose or review the architecture for this project."
