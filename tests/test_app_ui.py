@@ -34,7 +34,7 @@ class AppUiTests(unittest.TestCase):
         self.assertEqual(app.title[0].value, "Talk to your data")
         self.assertIn("stage 10", app.info[0].value)
 
-    def test_saved_dataset_shows_the_selected_table_quick_editor(self) -> None:
+    def test_saved_dataset_shows_the_selected_table_editor_and_exports(self) -> None:
         app = AppTest.from_string(
             '''
 from datetime import datetime, timezone
@@ -59,3 +59,39 @@ render_data_generation(runtime)
         self.assertFalse(app.exception)
         self.assertIn("Quick edit instruction", [area.label for area in app.text_area])
         self.assertIn("Submit", [button.label for button in app.button])
+        self.assertEqual(
+            [button.label for button in app.get("download_button")],
+            ["Download items.csv", "Download complete dataset (.zip)"],
+        )
+
+    def test_in_memory_draft_does_not_offer_exports(self) -> None:
+        app = AppTest.from_string(
+            '''
+from application.dataset_service import DatasetService
+from application.runtime import AppRuntime
+from domain.ddl_parser import parse_ddl
+from domain.dependency_planner import plan_generation
+from domain.draft_generation import DraftDataset, GenerationConfig
+from ui.data_generation import _render_draft_and_saved_preview
+import streamlit as st
+
+class UnusedGenerator:
+    def generate(self, request, *, on_text=None):
+        raise AssertionError("not used")
+
+schema = parse_ddl("CREATE TABLE items (id INT PRIMARY KEY, name TEXT NOT NULL);")
+draft = DraftDataset(
+    rows_by_table={"items": ({"id": 1, "name": "Draft only"},)},
+    plan=plan_generation(schema),
+    config=GenerationConfig(rows_per_table=1),
+)
+st.session_state["draft_dataset"] = draft
+st.session_state["draft_schema_digest"] = "draft-digest"
+runtime = AppRuntime(repository=object(), dataset_service=DatasetService(None, UnusedGenerator()))
+_render_draft_and_saved_preview(runtime, schema, "draft-digest")
+'''
+        )
+        app.run()
+
+        self.assertFalse(app.exception)
+        self.assertEqual(app.get("download_button"), [])

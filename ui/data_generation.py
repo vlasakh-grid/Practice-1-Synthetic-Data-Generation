@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import streamlit as st
 
+from application.dataset_export import export_dataset_zip, export_table_csv
 from application.runtime import AppRuntime
 from dataset_repository import DatasetRepositoryError, InvalidDatasetError
 from domain.dependency_planner import plan_generation
@@ -96,12 +97,14 @@ def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: 
     if draft is None or st.session_state.get("draft_schema_digest") != schema_digest:
         if runtime.persisted_dataset is None or runtime.persisted_dataset.schema_digest != schema_digest:
             return None
-        return render_dataset_preview(
+        selected_table = render_dataset_preview(
             runtime.persisted_dataset.schema,
             runtime.persisted_dataset,
             caption=f"Saved in PostgreSQL at {runtime.persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.",
             key_prefix="saved",
         )
+        _render_exports(runtime, selected_table)
+        return selected_table
 
     validation = runtime.dataset_service.validate(schema, draft)
     saved_preview = (
@@ -116,6 +119,7 @@ def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: 
             caption=f"Saved in PostgreSQL at {runtime.persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.",
             key_prefix="saved",
         )
+        _render_exports(runtime, selected_table)
     else:
         selected_table = render_dataset_preview(
             schema,
@@ -200,6 +204,33 @@ def _render_quick_edit(runtime: AppRuntime, selected_table: str, temperature: fl
         st.rerun()
 
 
+def _render_exports(runtime: AppRuntime, selected_table: str) -> None:
+    """Offer downloads derived only from the currently persisted dataset."""
+
+    current = runtime.persisted_dataset
+    if current is None:
+        return
+
+    st.subheader("Export")
+    table_export, dataset_export = st.columns(2)
+    with table_export:
+        st.download_button(
+            f"Download {selected_table}.csv",
+            data=export_table_csv(current, selected_table),
+            file_name=f"{selected_table}.csv",
+            mime="text/csv",
+            key="download-selected-table",
+        )
+    with dataset_export:
+        st.download_button(
+            "Download complete dataset (.zip)",
+            data=export_dataset_zip(current),
+            file_name="current-dataset.zip",
+            mime="application/zip",
+            key="download-complete-dataset",
+        )
+
+
 def render_data_generation(runtime: AppRuntime) -> None:
     """Render the complete DDL-to-saved-preview workflow."""
 
@@ -262,4 +293,5 @@ def render_data_generation(runtime: AppRuntime) -> None:
             key_prefix="persisted",
         )
         if selected_table is not None:
+            _render_exports(runtime, selected_table)
             _render_quick_edit(runtime, selected_table, temperature, int(max_output_tokens))

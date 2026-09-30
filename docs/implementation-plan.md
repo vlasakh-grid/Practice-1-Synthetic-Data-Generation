@@ -53,7 +53,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Apply a Gemini structured change, revalidate the whole dataset, persist it atomically, and refresh the preview.
    - Manual check: request a change to one table and confirm the changed rows and valid related data.
 
-9. [ ] **Export the current dataset**
+9. [x] **Export the current dataset**
    - Download the selected persisted table as CSV.
    - Download the complete persisted dataset as a ZIP archive of CSV files.
    - Manual check: download both formats, unpack the archive, and compare its tables and rows with the UI.

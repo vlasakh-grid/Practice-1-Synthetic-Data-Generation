@@ -2,63 +2,63 @@
 
 ## Completed
 
-- Stage 8 is complete: a saved dataset can be edited through an instruction
-  for the table currently selected in the preview.
-- Gemini receives only that table's schema and current rows, and must return a
-  complete same-order replacement. The domain layer rejects changed row count,
-  fields, primary keys, and foreign keys before validation.
-- `DatasetService.edit_current(...)` returns a candidate `DraftDataset` plus
-  whole-dataset `ValidationResult`; `apply_edit(...)` persists only a valid
-  candidate through the existing atomic PostgreSQL replacement transaction.
-- The Quick edit UI uses existing temperature and max-token controls. Failed
-  Gemini responses and validation failures leave the persisted dataset intact.
-- Stage 7 UI, generation, validation, persistence, and Talk-to-your-data
-  placeholder behavior remain available.
-- The sidebar now follows `task/sample.png`: white surface, compact title,
-  material navigation icons, a rounded active-item highlight, and button-based
-  navigation with no radio controls rendered.
+- Stage 9 is complete: a selected persisted table downloads as a UTF-8 CSV
+  with DDL-ordered headers, and the complete persisted dataset downloads as
+  `current-dataset.zip` containing one CSV per table in schema order.
+- `application.dataset_export.export_table_csv(dataset, table_name)` and
+  `export_dataset_zip(dataset)` are in-memory, read-only public export
+  interfaces. NULL values become empty CSV cells; the ZIP contains no schema
+  or metadata files.
+- Export controls appear only for the saved preview, never for an in-memory
+  draft, and reuse the runtime's restored `StoredDataset` without a database
+  query or mutation.
+- Stage 8 quick edits remain atomic and validate the complete candidate
+  dataset; the Stage 7 generation, validation, persistence, and navigation
+  workflows remain available.
 
 ## Verification
 
 - Command: `.venv/bin/python -m unittest -v`
-- Result: 32 tests passed, including quick-edit UI, candidate isolation,
-  invalid-edit persistence protection, and Gemini request-schema tests.
+- Result: 36 tests passed, including CSV/ZIP content and order, NULL handling,
+  saved-preview download controls, draft export exclusion, quick-edit, and
+  persistence regressions.
 - Command: `.venv/bin/python -m compileall -q app.py application ui domain tests dataset_repository.py integration_readiness.py llm.py`
 - Result: completed successfully.
 - Command: `docker compose config --quiet`
 - Result: configuration validated.
-- Command: `.venv/bin/python -m unittest tests.test_app_ui -v`
-- Result: 2 UI smoke tests passed, including sidebar labels and icon formatting.
-- Manual scenario to run with Docker Desktop: save a generated dataset, select
-  a table, enter a content-only quick-edit instruction, and click Submit.
-  Confirm only selected rows change, related rows remain valid, and the edit
-  remains after restarting Streamlit. Also request an invalid value and verify
-  that validation errors appear with no saved-data change. Preserve the stage-7
+- Command: `git diff --check`
+- Result: completed successfully.
+- Manual scenario to run with Docker Desktop: save a generated multi-table
+  dataset, select a table, download its CSV and download the complete ZIP.
+  Unpack the ZIP and compare every file name, header, and row with the UI;
+  restart Streamlit and repeat with the restored dataset. Also preserve the
+  Stage 8 valid/invalid quick-edit scenario and the Stage 7
   DDL-upload-to-saved-preview, invalid-draft, and library-cycle scenarios.
 
 ## Known Limitations
 
-- PostgreSQL transaction and browser persistence flows require Docker Desktop;
-  the new end-to-end Gemini edit was not browser-verified in this sandbox.
+- PostgreSQL transaction, browser persistence, and browser download flows
+  require Docker Desktop; end-to-end browser downloads were not verified in
+  this sandbox.
 - Quick edits intentionally preserve row count, primary keys, and foreign keys;
   they do not add/delete records or relink existing relationships.
 - CHECK validation supports only the existing safe subset, and Vertex AI plus
-  Langfuse credentials remain required for real generation and editing.
+  Langfuse credentials remain required for real generation and editing; exports
+  do not require either integration.
 
 ## Next Steps
 
-1. Implement stage 9 CSV and ZIP exports from the persisted current dataset.
-2. Implement stage 10 session-only, read-only Talk to your data chat.
+1. Implement stage 10 session-only, read-only Talk to your data chat.
+2. Implement stage 11 chat hardening and the end-to-end demo guide.
 
 ## Important Files
 
-- `application/dataset_service.py` - edit candidate validation and atomic
-  persistence use case.
-- `domain/table_editing.py` and `llm.py` - protected table-editing port and
-  Gemini structured-output adapter.
-- `ui/data_generation.py` and `ui/common.py` - selected-table preview and
-  Quick edit form.
-- `dataset_repository.py` and `domain/validation.py` - transactional save and
-  whole-dataset DDL constraint checks.
-- `tests/test_table_editing.py`, `tests/test_llm_table_editor.py`, and
-  `tests/test_app_ui.py` - stage-8 regression coverage.
+- `application/dataset_export.py` - public CSV and ZIP serialization
+  functions for `StoredDataset`.
+- `ui/data_generation.py` - saved-preview download controls alongside quick
+  editing.
+- `tests/test_dataset_export.py` and `tests/test_app_ui.py` - export format,
+  archive, and UI regression coverage.
+- `application/dataset_service.py`, `dataset_repository.py`, and
+  `ui/talk_to_data.py` - persistence boundary and the next Stage 10 entry
+  points.
