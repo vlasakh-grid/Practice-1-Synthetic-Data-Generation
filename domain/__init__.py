@@ -19,9 +19,11 @@ from .draft_generation import (
     generate_draft,
 )
 from .schema import CheckConstraint, Column, ForeignKey, Schema, Table, UniqueConstraint
+from .validation import CheckExpressionError, ValidationError, ValidationResult, validate_dataset
 
 __all__ = [
     "CheckConstraint",
+    "CheckExpressionError",
     "Column",
     "DeferredRelationship",
     "DDLParseError",
@@ -39,7 +41,10 @@ __all__ = [
     "SemanticValueGenerator",
     "Table",
     "UniqueConstraint",
+    "ValidationError",
+    "ValidationResult",
     "parse_ddl",
     "generate_draft",
     "plan_generation",
+    "validate_dataset",
 ]

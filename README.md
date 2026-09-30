@@ -15,6 +15,17 @@ Practice 1: Synthetic Data Generation
 
 PostgreSQL runs in the `postgres` Docker service. It is stored in the `postgres_data` Docker volume, so PostgreSQL does not need to be installed on the host machine.
 
+## Saving generated data
+
+After generating a draft, the app validates its primary keys, foreign keys,
+required fields, unique values, enum values, and supported `CHECK`
+expressions. `Save dataset` is enabled only for a valid draft. Saving replaces
+the one current dataset atomically; it is restored from PostgreSQL after a
+Streamlit restart without uploading the DDL again.
+
+Use **Load invalid validation demo** after generating a draft to inspect the
+constraint-error presentation. The demo never writes to PostgreSQL.
+
 ## Local UI without Docker
 
 For a host-local Streamlit run, use a project virtual environment:

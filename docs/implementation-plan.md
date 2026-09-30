@@ -38,7 +38,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Generate cyclic records and their deferred foreign-key values in separate phases.
    - Manual check: generate drafts for each supplied schema and switch between table previews.
 
-6. [ ] **Validate, persist, and restore a dataset**
+6. [x] **Validate, persist, and restore a dataset**
    - Validate explicit primary-key, foreign-key, required-field, unique, enum, and check constraints with errors identifying the table, row, field, and failed rule.
    - Persist only valid datasets to PostgreSQL transactionally and restore the current dataset from PostgreSQL after an application restart.
    - Manual check: generate and save a dataset, restart Streamlit, and verify that its data remains available; verify the error presentation for an invalid result.
