@@ -32,7 +32,9 @@
 - Manual scenarios to preserve: upload each DDL in `task/`; verify
   parent-before-child phases and the `Employees` / `Departments` /
   `Library_Branches` deferred cycle. Verify the readiness panel lists only
-  configuration status and no secrets. UI launch remains unverified locally.
+  configuration status and no secrets.
+- Manual result: host-local Streamlit UI checks are confirmed green when run
+  through the documented `.venv` startup path.
 
 ## Known Limitations
 

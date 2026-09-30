@@ -34,3 +34,15 @@ important files for the next agent.
 Before starting work, read `HANDOFF.md` and
 `docs/implementation-plan.md`. Preserve previously confirmed manual scenarios
 unless they are re-verified or the change explicitly supersedes them.
+
+## Local UI Verification
+
+When checking the Streamlit UI outside Docker, use the project virtual
+environment instead of assuming a global `streamlit` command exists:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
