@@ -58,12 +58,12 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Download the complete persisted dataset as a ZIP archive of CSV files.
    - Manual check: download both formats, unpack the archive, and compare its tables and rows with the UI.
 
-10. [ ] **Add the Talk to your data tab**
+10. [x] **Add the Talk to your data tab**
     - Add session-only chat history and streaming Gemini responses over the current PostgreSQL dataset.
     - Use function calling only for predefined read-only operations: schema lookup, bounded aggregates, and bounded row retrieval.
     - Manual check: ask analytical questions after generation and verify answers against the data preview.
 
-11. [ ] **Harden chat safety and complete the demo guide**
+11. [x] **Harden chat safety and complete the demo guide**
     - Enforce read-only database access, an allowlist of analytical operations, result/time limits, blocked DDL/DML, credential protection, and user-friendly errors.
     - Add an in-app usage guide and complete the README with Docker Desktop, Vertex AI, Langfuse, and end-to-end demo instructions.
     - Manual check: confirm a normal analytics question succeeds while data-changing, secret-seeking, and oversized requests are safely rejected without modifying the dataset.

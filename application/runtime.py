@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from application.data_chat_service import DataChatService
 from application.dataset_service import DatasetService
 from dataset_repository import DatasetRepository, StoredDataset
 
@@ -16,3 +17,4 @@ class AppRuntime:
     dataset_service: DatasetService
     persisted_dataset: StoredDataset | None = None
     restore_error: str | None = None
+    chat_service: DataChatService | None = None

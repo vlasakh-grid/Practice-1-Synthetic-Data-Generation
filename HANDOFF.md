@@ -2,63 +2,73 @@
 
 ## Completed
 
-- Stage 9 is complete: a selected persisted table downloads as a UTF-8 CSV
-  with DDL-ordered headers, and the complete persisted dataset downloads as
-  `current-dataset.zip` containing one CSV per table in schema order.
-- `application.dataset_export.export_table_csv(dataset, table_name)` and
-  `export_dataset_zip(dataset)` are in-memory, read-only public export
-  interfaces. NULL values become empty CSV cells; the ZIP contains no schema
-  or metadata files.
-- Export controls appear only for the saved preview, never for an in-memory
-  draft, and reuse the runtime's restored `StoredDataset` without a database
-  query or mutation.
-- Stage 8 quick edits remain atomic and validate the complete candidate
-  dataset; the Stage 7 generation, validation, persistence, and navigation
-  workflows remain available.
+- Stages 10 and 11 are complete. **Talk to your data** now keeps history only
+  in the active Streamlit session, clears it when the saved dataset changes,
+  streams Gemini's final explanation, and shows the exact compact evidence
+  returned by its approved analytics calls.
+- The public chat boundary is `domain.data_chat.parse_operation()` and
+  `validate_question()`, with only `lookup_schema`, `aggregate`, and
+  `retrieve_rows` permitted. Questions are capped at 1,000 characters, four
+  calls, 50 rows/groups, 1,024 response tokens, and a three-second statement
+  timeout; raw SQL, DDL/DML, credential-seeking, and whole-dataset requests
+  are refused before Gemini or PostgreSQL access.
+- `application.data_chat_service.DataChatService` and
+  `dataset_repository.AnalyticsRepository` are new public application and
+  infrastructure interfaces. The latter executes only validated,
+  parameterized operations through `ANALYTICS_DATABASE_URL` in a read-only
+  transaction. `GeminiAnalyticsChat` exposes exactly the three function calls
+  and does not trace questions, tool arguments, result rows, URLs, or secrets.
+- Fresh Docker volumes now create isolated non-superuser writer/reader roles.
+  The writer grants `synthetic_reader` (or the configured reader role) only
+  `USAGE` and `SELECT` on each recreated `generated_data` schema. README and
+  the in-app guide provide setup, safety, and demo instructions.
 
 ## Verification
 
 - Command: `.venv/bin/python -m unittest -v`
-- Result: 36 tests passed, including CSV/ZIP content and order, NULL handling,
-  saved-preview download controls, draft export exclusion, quick-edit, and
-  persistence regressions.
+- Result: 45 tests passed, including chat policy, function calling, reader
+  grants, read-only timeout/query behavior, tool-call cap, and Streamlit chat
+  evidence rendering.
 - Command: `.venv/bin/python -m compileall -q app.py application ui domain tests dataset_repository.py integration_readiness.py llm.py`
 - Result: completed successfully.
 - Command: `docker compose config --quiet`
 - Result: configuration validated.
 - Command: `git diff --check`
 - Result: completed successfully.
-- Manual scenario to run with Docker Desktop: save a generated multi-table
-  dataset, select a table, download its CSV and download the complete ZIP.
-  Unpack the ZIP and compare every file name, header, and row with the UI;
-  restart Streamlit and repeat with the restored dataset. Also preserve the
-  Stage 8 valid/invalid quick-edit scenario and the Stage 7
-  DDL-upload-to-saved-preview, invalid-draft, and library-cycle scenarios.
+- Manual scenario still required with Docker Desktop, a fresh `postgres_data`
+  volume, Vertex AI credentials, and Langfuse credentials: save a multi-table
+  dataset; ask a count, grouped aggregate, and ≤10-row question; compare the
+  evidence with the preview; then try UPDATE/DROP, a credential request, and
+  an entire-dataset request. Confirm refusals leave data unchanged; restart
+  Streamlit and confirm data persists while chat history is empty. Preserve
+  the prior Stage 7–9 DDL, validation, quick-edit, and export scenarios.
 
 ## Known Limitations
 
-- PostgreSQL transaction, browser persistence, and browser download flows
-  require Docker Desktop; end-to-end browser downloads were not verified in
-  this sandbox.
-- Quick edits intentionally preserve row count, primary keys, and foreign keys;
-  they do not add/delete records or relink existing relationships.
-- CHECK validation supports only the existing safe subset, and Vertex AI plus
-  Langfuse credentials remain required for real generation and editing; exports
-  do not require either integration.
+- End-to-end Docker/browser and live Gemini/Langfuse verification require
+  local Docker Desktop, Vertex AI access, and Langfuse credentials; they were
+  not run in this sandbox.
+- Reader/writer roles are created only when PostgreSQL initializes a new
+  volume. Existing local volumes need the documented `docker compose down -v`
+  reset, which removes their generated data.
+- Analytics deliberately supports one table, equality filters, and no joins or
+  arbitrary predicates. It does not execute user- or model-provided SQL.
 
 ## Next Steps
 
-1. Implement stage 10 session-only, read-only Talk to your data chat.
-2. Implement stage 11 chat hardening and the end-to-end demo guide.
+1. Perform the documented live Docker demonstration and verify the configured
+   reader role cannot write outside the app.
+2. No unimplemented delivery stages remain; future work can expand analytics
+   operations only by extending the typed policy, tests, and reader-role
+   boundary together.
 
 ## Important Files
 
-- `application/dataset_export.py` - public CSV and ZIP serialization
-  functions for `StoredDataset`.
-- `ui/data_generation.py` - saved-preview download controls alongside quick
-  editing.
-- `tests/test_dataset_export.py` and `tests/test_app_ui.py` - export format,
-  archive, and UI regression coverage.
-- `application/dataset_service.py`, `dataset_repository.py`, and
-  `ui/talk_to_data.py` - persistence boundary and the next Stage 10 entry
-  points.
+- `domain/data_chat.py` — safety policy, limits, typed analytical operations,
+  and schema validation.
+- `application/data_chat_service.py`, `llm.py`, and `ui/talk_to_data.py` —
+  chat orchestration, Gemini function calling/streaming, and session UI.
+- `dataset_repository.py`, `compose.yaml`, and `docker/init/01-create-app-roles.sh`
+  — reader enforcement and Docker role initialization.
+- `README.md` and `tests/test_data_chat.py` — configuration/demo guide and
+  safety/regression coverage.

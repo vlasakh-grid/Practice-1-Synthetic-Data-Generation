@@ -19,6 +19,15 @@ except ModuleNotFoundError:  # pragma: no cover - exercised only outside the app
         raise RuntimeError("Dataset persistence requires the SQLAlchemy dependency.")
 
 from domain.draft_generation import DraftDataset, GenerationConfig
+from domain.data_chat import (
+    Aggregate,
+    AnalyticsOperation,
+    DATABASE_TIMEOUT_MS,
+    MAX_GROUP_LIMIT,
+    RowRetrieval,
+    SchemaLookup,
+    schema_summary,
+)
 from domain.schema import CheckConstraint, Column, ForeignKey, Schema, Table, UniqueConstraint
 from domain.validation import ValidationResult, compile_postgres_check, validate_dataset
 
@@ -55,14 +64,15 @@ class DatasetRepository:
     metadata_schema = "synthetic_app"
     metadata_table = "current_dataset"
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, reader_role: str | None = None) -> None:
         self.engine = engine
+        self.reader_role = reader_role
 
     @classmethod
-    def from_url(cls, database_url: str) -> "DatasetRepository":
+    def from_url(cls, database_url: str, *, reader_role: str | None = None) -> "DatasetRepository":
         if create_engine is None:
             raise DatasetRepositoryError("Dataset persistence requires the SQLAlchemy dependency.")
-        return cls(create_engine(database_url))
+        return cls(create_engine(database_url), reader_role=reader_role)
 
     def save(self, schema: Schema, draft: DraftDataset, schema_digest: str) -> datetime:
         """Validate and atomically replace the one persisted current dataset."""
@@ -81,6 +91,7 @@ class DatasetRepository:
                 for table in schema.tables:
                     for foreign_key in table.foreign_keys:
                         connection.execute(text(_add_foreign_key_sql(self.data_schema, table, foreign_key)))
+                self._grant_reader_access(connection)
                 for table in schema.tables:
                     rows = draft.rows_for(table.name)
                     if rows:
@@ -147,9 +158,119 @@ class DatasetRepository:
             )
         )
 
+    def _grant_reader_access(self, connection) -> None:
+        """Grant the separately configured chat role access only to current data."""
+
+        if not self.reader_role:
+            return
+        connection.execute(text(f"GRANT USAGE ON SCHEMA {_quote(self.data_schema)} TO {_quote(self.reader_role)}"))
+        connection.execute(text(f"GRANT SELECT ON ALL TABLES IN SCHEMA {_quote(self.data_schema)} TO {_quote(self.reader_role)}"))
+
     def _require_postgres(self) -> None:
         if self.engine.dialect.name != "postgresql":
             raise DatasetRepositoryError("Dataset persistence requires PostgreSQL.")
+
+
+class AnalyticsRepositoryError(RuntimeError):
+    """Raised without database details when a bounded analytics query fails."""
+
+
+class AnalyticsRepository:
+    """Execute approved analytical operations through the read-only database URL."""
+
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
+
+    @classmethod
+    def from_url(cls, database_url: str) -> "AnalyticsRepository":
+        if create_engine is None:
+            raise AnalyticsRepositoryError("Analytics requires the SQLAlchemy dependency.")
+        return cls(create_engine(database_url))
+
+    def execute(self, operation: AnalyticsOperation, schema: Schema) -> dict[str, Any]:
+        """Run one operation in a read-only, time-limited transaction."""
+
+        if isinstance(operation, SchemaLookup):
+            return {"kind": "schema", **schema_summary(schema, operation.table_name)}
+        if self.engine.dialect.name != "postgresql":
+            raise AnalyticsRepositoryError("Analytics requires PostgreSQL.")
+        try:
+            with self.engine.connect() as connection:
+                connection.execute(text("SET TRANSACTION READ ONLY"))
+                connection.execute(text(f"SET LOCAL statement_timeout = '{DATABASE_TIMEOUT_MS}ms'"))
+                if isinstance(operation, Aggregate):
+                    return _execute_aggregate(connection, operation)
+                if isinstance(operation, RowRetrieval):
+                    return _execute_rows(connection, operation)
+        except AnalyticsRepositoryError:
+            raise
+        except Exception as error:
+            raise AnalyticsRepositoryError("The analytics query could not be completed safely.") from error
+        raise AnalyticsRepositoryError("The requested analytics operation is not supported.")
+
+
+def _where_clause(filters) -> tuple[str, dict[str, Any]]:
+    """Build parameterized equality predicates from already validated filters."""
+
+    clauses: list[str] = []
+    parameters: dict[str, Any] = {}
+    for index, item in enumerate(filters):
+        if item.value is None:
+            clauses.append(f"{_quote(item.column)} IS NULL")
+        else:
+            parameter = f"filter_{index}"
+            clauses.append(f"{_quote(item.column)} = :{parameter}")
+            parameters[parameter] = item.value
+    return (" WHERE " + " AND ".join(clauses)) if clauses else "", parameters
+
+
+def _execute_aggregate(connection, operation: Aggregate) -> dict[str, Any]:
+    where, parameters = _where_clause(operation.filters)
+    table = _qualified(DatasetRepository.data_schema, operation.table_name)
+    if operation.metric == "count":
+        expression = "COUNT(*)"
+    else:
+        expression = f"{operation.metric.upper()}({_quote(operation.column)})"
+    if operation.group_by:
+        group = _quote(operation.group_by)
+        statement = (
+            f"SELECT {group} AS \"group\", {expression} AS \"value\" FROM {table}{where} "
+            f"GROUP BY {group} ORDER BY {group} LIMIT {MAX_GROUP_LIMIT}"
+        )
+        columns = ["group", "value"]
+    else:
+        statement = f"SELECT {expression} AS \"value\" FROM {table}{where}"
+        columns = ["value"]
+    rows = [_analytics_row(row) for row in connection.execute(text(statement), parameters).mappings()]
+    return {"kind": "aggregate", "columns": columns, "rows": rows}
+
+
+def _execute_rows(connection, operation: RowRetrieval) -> dict[str, Any]:
+    where, parameters = _where_clause(operation.filters)
+    table = _qualified(DatasetRepository.data_schema, operation.table_name)
+    columns = ", ".join(_quote(column) for column in operation.columns)
+    direction = "DESC" if operation.descending else "ASC"
+    order_by = _quote(operation.order_by or operation.columns[0])
+    parameters["limit"] = operation.limit
+    statement = f"SELECT {columns} FROM {table}{where} ORDER BY {order_by} {direction} LIMIT :limit"
+    rows = [_analytics_row(row) for row in connection.execute(text(statement), parameters).mappings()]
+    return {"kind": "rows", "columns": list(operation.columns), "rows": rows}
+
+
+def _analytics_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep function-call responses JSON-compatible without changing query semantics."""
+
+    return {key: _analytics_value(value) for key, value in dict(row).items()}
+
+
+def _analytics_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _analytics_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_analytics_value(item) for item in value]
+    return str(value)
 
 
 def schema_from_dict(value: Mapping[str, Any]) -> Schema:

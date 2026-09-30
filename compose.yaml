@@ -3,12 +3,17 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-synthetic_data}
-      POSTGRES_USER: ${POSTGRES_USER:-synthetic_user}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_DB_USER: ${APP_DB_USER:-synthetic_writer}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-change-me-before-starting}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-synthetic_reader}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:-change-me-before-starting}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init/01-create-app-roles.sh:/docker-entrypoint-initdb.d/01-create-app-roles.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -20,10 +25,13 @@ services:
     build:
       context: .
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-synthetic_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-synthetic_data}
+      DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-synthetic_writer}:${APP_DB_PASSWORD:-change-me-before-starting}@postgres:5432/${POSTGRES_DB:-synthetic_data}
+      ANALYTICS_DATABASE_URL: postgresql+psycopg://${ANALYTICS_DB_USER:-synthetic_reader}:${ANALYTICS_DB_PASSWORD:-change-me-before-starting}@postgres:5432/${POSTGRES_DB:-synthetic_data}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-synthetic_reader}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -34,6 +42,7 @@ services:
         condition: service_healthy
     volumes:
       - ./:/app
+      - ./secrets:/run/secrets:ro
     restart: unless-stopped
 
 volumes:

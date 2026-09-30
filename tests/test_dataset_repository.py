@@ -140,6 +140,16 @@ class DatasetRepositoryTests(unittest.TestCase):
         self.assertEqual(restored.rows_for("items"), ({"id": 1, "name": "first"},))
         self.assertEqual(restored.schema_digest, "digest-1")
 
+    @unittest.skipUnless(importlib.util.find_spec("sqlalchemy"), "requires SQLAlchemy")
+    def test_save_grants_reader_only_current_generated_schema_access(self) -> None:
+        schema = parse_ddl("CREATE TABLE items (id INT PRIMARY KEY, name TEXT NOT NULL);")
+        engine = _RecordingEngine()
+
+        DatasetRepository(engine, reader_role="synthetic_reader").save(schema, _draft(schema, {"items": [{"id": 1, "name": "first"}]}), "digest")
+
+        self.assertIn('GRANT USAGE ON SCHEMA "generated_data" TO "synthetic_reader"', engine.connection.commands)
+        self.assertIn('GRANT SELECT ON ALL TABLES IN SCHEMA "generated_data" TO "synthetic_reader"', engine.connection.commands)
+
 
 if __name__ == "__main__":
     unittest.main()
