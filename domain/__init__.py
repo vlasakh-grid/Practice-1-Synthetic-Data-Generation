@@ -9,6 +9,15 @@ from .dependency_planner import (
     GenerationPhase,
     plan_generation,
 )
+from .draft_generation import (
+    DraftDataset,
+    DraftGenerationError,
+    GenerationConfig,
+    GenerationProgress,
+    SemanticGenerationRequest,
+    SemanticValueGenerator,
+    generate_draft,
+)
 from .schema import CheckConstraint, Column, ForeignKey, Schema, Table, UniqueConstraint
 
 __all__ = [
@@ -16,14 +25,21 @@ __all__ = [
     "Column",
     "DeferredRelationship",
     "DDLParseError",
+    "DraftDataset",
+    "DraftGenerationError",
     "DependencyCycle",
     "DependencyPlan",
     "DependencyPlanningError",
     "ForeignKey",
     "GenerationPhase",
+    "GenerationConfig",
+    "GenerationProgress",
     "Schema",
+    "SemanticGenerationRequest",
+    "SemanticValueGenerator",
     "Table",
     "UniqueConstraint",
     "parse_ddl",
+    "generate_draft",
     "plan_generation",
 ]

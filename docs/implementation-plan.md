@@ -32,7 +32,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - After a DDL upload, display generation phases, deferred relationships/cycles, and a safe Gemini/Langfuse readiness diagnostic without exposing secrets.
    - Manual check: upload all three supplied schemas; verify parent-before-child phases and the explicit `Employees` / `Departments` / `Library_Branches` cycle in the library schema.
 
-5. [ ] **Generate a draft dataset and preview it**
+5. [x] **Generate a draft dataset and preview it**
    - Add a natural-language instruction, temperature, max tokens, and rows-per-table controls.
    - Use Gemini structured output to generate records in dependency phases, show streaming progress, and present an in-memory draft preview per table.
    - Generate cyclic records and their deferred foreign-key values in separate phases.
