@@ -27,7 +27,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Support the MySQL-like syntax used in all three supplied schemas while producing a PostgreSQL-compatible internal representation.
    - Manual check: upload any supplied DDL file and inspect its table overview and parsed constraints.
 
-4. [ ] **Show dependency planning and integration readiness**
+4. [x] **Show dependency planning and integration readiness**
    - Build a foreign-key dependency model with a stable generation order, self-references, and strongly connected components.
    - After a DDL upload, display generation phases, deferred relationships/cycles, and a safe Gemini/Langfuse readiness diagnostic without exposing secrets.
    - Manual check: upload all three supplied schemas; verify parent-before-child phases and the explicit `Employees` / `Departments` / `Library_Branches` cycle in the library schema.

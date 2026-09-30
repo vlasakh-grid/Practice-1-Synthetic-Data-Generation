@@ -14,3 +14,19 @@ Practice 1: Synthetic Data Generation
 4. Open [http://localhost:8501](http://localhost:8501).
 
 PostgreSQL runs in the `postgres` Docker service. It is stored in the `postgres_data` Docker volume, so PostgreSQL does not need to be installed on the host machine.
+
+## Local UI without Docker
+
+For a host-local Streamlit run, use a project virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+The `streamlit` executable is provided by the Python package in
+`requirements.txt`; it is not expected to exist on a fresh system Python
+installation. Running through `.venv` keeps the project dependencies local and
+reproducible.
