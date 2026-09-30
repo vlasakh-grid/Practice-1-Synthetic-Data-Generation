@@ -11,7 +11,10 @@
 - The Streamlit Deploy control is hidden with the scoped
   `[data-testid='stDeployButton']` style. Generation, validation, and
   PostgreSQL persistence contracts are unchanged.
-- Public interfaces are unchanged.
+- The UI and bootstrap layers are now separated: `app.py` is a thin
+  composition root, `application/` contains runtime assembly and dataset use
+  cases, and `ui/` contains page and component renderers.
+- Public domain and persistence interfaces are unchanged.
 
 ## Verification
 
@@ -21,6 +24,8 @@
   placeholder.
 - Command: `.venv/bin/python -m compileall -q app.py domain tests dataset_repository.py integration_readiness.py llm.py`
 - Result: completed successfully.
+- Command: `.venv/bin/python -m compileall -q app.py application ui domain tests dataset_repository.py integration_readiness.py llm.py`
+- Result: completed successfully after the UI/application-layer refactor.
 - Command: `docker compose config --quiet`
 - Result: configuration validated.
 - Manual scenario: start the app, confirm Deploy is hidden; upload each DDL,
@@ -45,7 +50,11 @@
 
 ## Important Files
 
-- `app.py` - sidebar navigation, Data Generation workflow, and stage-10 placeholder.
+- `app.py` - thin Streamlit composition root.
+- `application/bootstrap.py` and `application/dataset_service.py` - runtime
+  assembly and dataset use cases.
+- `ui/` - navigation, Data Generation, diagnostics, preview, and chat placeholder.
 - `dataset_repository.py` - atomic save and restore of the current dataset.
 - `domain/validation.py` - constraint validation used before persistence.
+- `docs/architecture.md` - current application-layer boundaries.
 - `docs/implementation-plan.md` - completed-stage tracking.
