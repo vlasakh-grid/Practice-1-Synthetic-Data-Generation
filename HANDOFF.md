@@ -14,6 +14,8 @@
 - The UI and bootstrap layers are now separated: `app.py` is a thin
   composition root, `application/` contains runtime assembly and dataset use
   cases, and `ui/` contains page and component renderers.
+- The architecture skill is now named `app-architecture` and lives at
+  `skills/app-architecture/`.
 - Public domain and persistence interfaces are unchanged.
 
 ## Verification
@@ -26,6 +28,8 @@
 - Result: completed successfully.
 - Command: `.venv/bin/python -m compileall -q app.py application ui domain tests dataset_repository.py integration_readiness.py llm.py`
 - Result: completed successfully after the UI/application-layer refactor.
+- Command: `quick_validate.py skills/app-architecture`
+- Result: not runnable because PyYAML is not installed in the available Python environments; frontmatter and `agents/openai.yaml` were checked manually.
 - Command: `docker compose config --quiet`
 - Result: configuration validated.
 - Manual scenario: start the app, confirm Deploy is hidden; upload each DDL,
@@ -56,5 +60,5 @@
 - `ui/` - navigation, Data Generation, diagnostics, preview, and chat placeholder.
 - `dataset_repository.py` - atomic save and restore of the current dataset.
 - `domain/validation.py` - constraint validation used before persistence.
-- `skills/synthetic-data-app-architecture/SKILL.md` - current application-layer boundaries.
+- `skills/app-architecture/SKILL.md` - current application-layer boundaries.
 - `docs/implementation-plan.md` - completed-stage tracking.

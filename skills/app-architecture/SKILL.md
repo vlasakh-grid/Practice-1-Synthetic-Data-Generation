@@ -1,5 +1,5 @@
 ---
-name: synthetic-data-app-architecture
+name: app-architecture
 description: "Design or review architecture for a DDL-driven synthetic-data application with generation, validation, editing, export, and data chat. Use for this project's architectural decisions; not for unrelated application designs."
 ---
 
