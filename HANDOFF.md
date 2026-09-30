@@ -56,5 +56,5 @@
 - `ui/` - navigation, Data Generation, diagnostics, preview, and chat placeholder.
 - `dataset_repository.py` - atomic save and restore of the current dataset.
 - `domain/validation.py` - constraint validation used before persistence.
-- `docs/architecture.md` - current application-layer boundaries.
+- `skills/synthetic-data-app-architecture/SKILL.md` - current application-layer boundaries.
 - `docs/implementation-plan.md` - completed-stage tracking.

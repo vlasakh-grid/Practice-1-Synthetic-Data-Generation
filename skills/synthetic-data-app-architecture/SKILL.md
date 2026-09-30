@@ -13,10 +13,22 @@ When the request concerns the assignment's requirements or delivery plan, read `
 
 Organize the app into independently testable layers:
 
-- **UI:** Streamlit pages and components for Data Generation and Talk to your data. Keep UI state and rendering separate from database, parser, and LLM logic.
-- **Application services:** orchestration for dataset creation, edits, exports, and analytical chat. These services define transaction boundaries and return user-oriented results.
+- **Entry point/composition root:** app.py is a thin Streamlit entrypoint. It configures the page, builds AppRuntime, selects the sidebar page, and delegates rendering. It does not parse DDL, call Gemini, access PostgreSQL, or implement validation.
+- **UI:** Streamlit pages and components for Data Generation and Talk to your data. Keep UI state and rendering separate from database, parser, and LLM logic. UI modules may use st.session_state and translate application errors into user-facing messages, but must not implement SQL or domain constraint rules.
+- **Application services:** application/bootstrap.py assembles environment configuration and infrastructure gateways into AppRuntime; application/dataset_service.py orchestrates dataset generation, validation, persistence, and restoration. These services define transaction boundaries and return user-oriented results without rendering Streamlit widgets.
 - **Domain:** a canonical schema model, DDL parser, FK dependency planner, data generators, constraint validator, and SQL safety policy. Domain code must not depend on Streamlit or a Gemini SDK.
 - **Infrastructure:** Google GenAI/Vertex AI gateway, PostgreSQL repositories and bulk loader, CSV/ZIP exporter, and Langfuse tracing.
+
+The current UI modules are split by responsibility:
+
+- ui/common.py — navigation, preview, validation messages, and shared styling;
+- ui/data_generation.py — DDL-to-preview workflow and session interactions;
+- ui/diagnostics.py — schema, dependency-plan, and integration readiness;
+- ui/talk_to_data.py — stage-10 placeholder and future chat entrypoint.
+
+Do not add substantial page logic back to app.py; add a UI module or an
+application service at the appropriate layer instead. Domain and persistence
+interfaces remain independent of this presentation split.
 
 Use a canonical schema representation that captures tables, columns, types, nullability, defaults, primary/foreign/unique/check constraints, and enums. Normalize the supported input DDL dialects into this model before planning generation or producing PostgreSQL-compatible output.
 
