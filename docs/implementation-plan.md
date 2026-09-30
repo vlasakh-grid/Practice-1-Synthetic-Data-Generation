@@ -43,7 +43,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Persist only valid datasets to PostgreSQL transactionally and restore the current dataset from PostgreSQL after an application restart.
    - Manual check: generate and save a dataset, restart Streamlit, and verify that its data remains available; verify the error presentation for an invalid result.
 
-7. [ ] **Complete the Data Generation workflow UI**
+7. [x] **Complete the Data Generation workflow UI**
    - Arrange the existing workflow around the structure in `task/sample.png`: sidebar navigation, DDL upload, prompt, parameters, Generate action, table selector, preview, and current-dataset status.
    - Preserve the generation and persistence contracts from earlier stages.
    - Manual check: complete the DDL-upload-to-saved-preview workflow entirely through the target screen.

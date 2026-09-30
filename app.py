@@ -1,4 +1,4 @@
-"""Streamlit entry point for DDL upload and synthetic data workflows."""
+"""Streamlit entry point for the synthetic-data generation workflow."""
 
 import hashlib
 import os
@@ -6,7 +6,6 @@ from dataclasses import replace
 
 from dotenv import load_dotenv
 import streamlit as st
-from sqlalchemy import text
 
 from dataset_repository import DatasetRepository, DatasetRepositoryError, InvalidDatasetError, StoredDataset
 from domain.dependency_planner import plan_generation
@@ -19,11 +18,31 @@ from llm import GeminiSemanticValueGenerator
 load_dotenv()
 
 
+def _hide_streamlit_deploy_button() -> None:
+    """Hide only Streamlit's hosting control, not the rest of its toolbar."""
+
+    st.markdown(
+        "<style>[data-testid='stDeployButton'] { display: none !important; }</style>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_sidebar() -> str:
+    """Render the stable application navigation shared by future workflow pages."""
+
+    with st.sidebar:
+        st.title("Data Assistant")
+        return st.radio(
+            "Navigation",
+            ("Data Generation", "Talk to your data"),
+            label_visibility="collapsed",
+        )
+
+
 def _render_generation_plan(schema) -> None:
     """Render the deterministic plan without coupling the planner to Streamlit."""
 
     plan = plan_generation(schema)
-    st.subheader("Generation plan")
     if plan.is_supported:
         st.success("The schema has a safe generation plan.")
     else:
@@ -62,7 +81,6 @@ def _render_generation_plan(schema) -> None:
 def _render_integration_readiness() -> None:
     """Render local configuration status without contacting Gemini or Langfuse."""
 
-    st.subheader("Integration readiness")
     st.caption("Configuration only — no network requests are made and secrets are never displayed.")
     for check in inspect_integration_readiness():
         details = " · ".join(f"{label}: {value}" for label, value in check.details.items())
@@ -94,101 +112,159 @@ def _invalid_demo_draft(schema, draft: DraftDataset) -> DraftDataset:
 
 
 def _render_dataset_preview(schema, dataset, *, caption: str, key_prefix: str) -> None:
+    """Show one selected table from a draft or a saved dataset."""
+
     table_names = [table.name for table in schema.tables]
     if not table_names:
         return
-    selected_table = st.selectbox("Preview table", table_names, key=f"{key_prefix}-preview-table")
+    header, selector = st.columns((4, 1))
+    with header:
+        st.subheader("Data preview")
+    with selector:
+        selected_table = st.selectbox("Preview table", table_names, key=f"{key_prefix}-preview-table")
     st.caption(f"{len(dataset.rows_for(selected_table))} rows in {selected_table}. {caption}")
     st.dataframe(dataset.rows_for(selected_table), hide_index=True, use_container_width=True)
 
 
-def _render_draft_generation(schema, schema_digest: str, repository: DatasetRepository | None) -> None:
-    """Render draft generation, validation, and explicit persistence controls."""
+def _clear_stale_draft(schema_digest: str) -> None:
+    """Keep a session draft tied to exactly one uploaded schema."""
 
-    plan = plan_generation(schema)
     if st.session_state.get("draft_schema_digest") != schema_digest:
         st.session_state.pop("draft_dataset", None)
         st.session_state.pop("draft_schema_digest", None)
 
-    st.subheader("Draft dataset")
-    st.caption("Validate a draft before explicitly saving it as the current PostgreSQL dataset.")
-    with st.form("draft-generation-form"):
-        instruction = st.text_area(
-            "Generation instruction",
-            placeholder="For example: generate a family-friendly restaurant dataset for Austin, Texas.",
+
+def _generate_draft(
+    schema,
+    schema_digest: str,
+    instruction: str,
+    temperature: float,
+    max_output_tokens: int,
+    rows_per_table: int,
+) -> None:
+    """Generate a full draft while rendering progress in the current UI page."""
+
+    progress = st.progress(0, text="Preparing draft generation.")
+    status = st.status("Preparing draft generation.", expanded=True)
+
+    def report(event: GenerationProgress) -> None:
+        status.update(label=event.message, state="running", expanded=True)
+        if event.total_steps:
+            progress.progress(event.completed_steps / event.total_steps, text=event.message)
+
+    try:
+        draft = generate_draft(
+            schema,
+            GenerationConfig(
+                instruction=instruction,
+                temperature=temperature,
+                max_output_tokens=int(max_output_tokens),
+                rows_per_table=int(rows_per_table),
+            ),
+            GeminiSemanticValueGenerator(),
+            on_progress=report,
         )
-        parameters = st.columns(3)
-        with parameters[0]:
-            temperature = st.slider("Temperature", min_value=0.0, max_value=2.0, value=0.7, step=0.1)
-        with parameters[1]:
-            max_output_tokens = st.number_input(
-                "Max tokens", min_value=256, max_value=8192, value=4096, step=256
-            )
-        with parameters[2]:
-            rows_per_table = st.number_input(
-                "Rows per table", min_value=1, max_value=100, value=10, step=1
-            )
-        submitted = st.form_submit_button("Generate draft", disabled=not plan.is_supported, type="primary")
+    except DraftGenerationError as error:
+        st.session_state.pop("draft_dataset", None)
+        st.session_state.pop("draft_schema_digest", None)
+        progress.empty()
+        status.update(label="Draft generation failed.", state="error", expanded=False)
+        st.error(str(error))
+    else:
+        st.session_state["draft_dataset"] = draft
+        st.session_state["draft_schema_digest"] = schema_digest
+        progress.progress(1.0, text="Draft generation complete.")
+        status.update(label="Draft generation complete.", state="complete", expanded=False)
+        st.success("Draft dataset is ready for preview.")
 
-    if not plan.is_supported:
-        st.warning("Draft generation is unavailable until the unsupported foreign-key cycle is resolved.")
-    elif submitted:
-        progress = st.progress(0, text="Preparing draft generation.")
-        status = st.status("Preparing draft generation.", expanded=True)
 
-        def report(event: GenerationProgress) -> None:
-            status.update(label=event.message, state="running", expanded=True)
-            if event.total_steps:
-                progress.progress(event.completed_steps / event.total_steps, text=event.message)
+def _render_current_dataset_status(repository: DatasetRepository | None, persisted_dataset: StoredDataset | None) -> None:
+    """Keep persistence status visible without distracting from generation controls."""
 
-        try:
-            draft = generate_draft(
-                schema,
-                GenerationConfig(
-                    instruction=instruction,
-                    temperature=temperature,
-                    max_output_tokens=int(max_output_tokens),
-                    rows_per_table=int(rows_per_table),
-                ),
-                GeminiSemanticValueGenerator(),
-                on_progress=report,
-            )
-        except DraftGenerationError as error:
-            st.session_state.pop("draft_dataset", None)
-            st.session_state.pop("draft_schema_digest", None)
-            progress.empty()
-            status.update(label="Draft generation failed.", state="error", expanded=False)
-            st.error(str(error))
-        else:
-            st.session_state["draft_dataset"] = draft
-            st.session_state["draft_schema_digest"] = schema_digest
-            progress.progress(1.0, text="Draft generation complete.")
-            status.update(label="Draft generation complete.", state="complete", expanded=False)
-            st.success("Draft dataset is ready for preview.")
+    st.subheader("Current dataset")
+    if persisted_dataset is not None:
+        st.success(
+            f"Saved in PostgreSQL at {persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z} "
+            f"({len(persisted_dataset.schema.tables)} tables)."
+        )
+    elif repository is None:
+        st.info("PostgreSQL is not configured. You can generate a draft, but cannot save it yet.")
+    elif st.session_state.get("persisted_dataset_restore_error"):
+        st.warning(f"Current dataset could not be restored: {st.session_state['persisted_dataset_restore_error']}")
+    else:
+        st.info("No saved dataset yet. Generate and validate a draft to save the current dataset.")
+
+
+def _render_schema_details(schema) -> None:
+    """Keep schema diagnostics available without interrupting the main workflow."""
+
+    overview = [
+        {
+            "Table": table.name,
+            "Columns": len(table.columns),
+            "Primary key": ", ".join(table.primary_key) or "-",
+            "Foreign keys": len(table.foreign_keys),
+        }
+        for table in schema.tables
+    ]
+    with st.expander("Schema details"):
+        st.dataframe(overview, hide_index=True, use_container_width=True)
+        st.json(schema.as_dict())
+    with st.expander("Generation plan"):
+        _render_generation_plan(schema)
+    with st.expander("Integration readiness"):
+        _render_integration_readiness()
+
+
+def _render_draft_and_saved_preview(
+    schema,
+    schema_digest: str,
+    repository: DatasetRepository | None,
+    persisted_dataset: StoredDataset | None,
+) -> None:
+    """Validate a draft and surface the saved result once persistence succeeds."""
 
     draft = st.session_state.get("draft_dataset")
-    if draft is not None and st.session_state.get("draft_schema_digest") == schema_digest:
-        validation = validate_dataset(schema, draft)
-        _render_validation(validation)
+    if draft is None or st.session_state.get("draft_schema_digest") != schema_digest:
+        return
+
+    validation = validate_dataset(schema, draft)
+    saved_preview = persisted_dataset is not None and persisted_dataset.schema_digest == schema_digest and validation.is_valid
+    if saved_preview:
+        _render_dataset_preview(
+            persisted_dataset.schema,
+            persisted_dataset,
+            caption=f"Saved in PostgreSQL at {persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.",
+            key_prefix="saved",
+        )
+    else:
+        _render_dataset_preview(
+            schema,
+            draft,
+            caption="In-memory draft; changes are not saved yet.",
+            key_prefix="draft",
+        )
+    _render_validation(validation)
+
+    actions, demo = st.columns((1, 1))
+    with actions:
+        if repository is None:
+            st.info("Configure PostgreSQL to save a validated dataset.")
+        elif st.button("Save dataset", disabled=not validation.is_valid, type="primary"):
+            try:
+                repository.save(schema, draft, schema_digest)
+                persisted_dataset = repository.load_current()
+            except InvalidDatasetError as error:
+                _render_validation(error.result)
+            except DatasetRepositoryError as error:
+                st.error(str(error))
+            else:
+                st.session_state["persisted_dataset"] = persisted_dataset
+                st.rerun()
+    with demo:
         if st.button("Load invalid validation demo", key="invalid-draft-demo"):
             st.session_state["draft_dataset"] = _invalid_demo_draft(schema, draft)
             st.rerun()
-        _render_dataset_preview(schema, draft, caption="In-memory draft; changes are not saved yet.", key_prefix="draft")
-
-        if repository is None:
-            st.info("Configure PostgreSQL to save a validated dataset.")
-        else:
-            if st.button("Save dataset", disabled=not validation.is_valid, type="primary"):
-                try:
-                    saved_at = repository.save(schema, draft, schema_digest)
-                    restored = repository.load_current()
-                except InvalidDatasetError as error:
-                    _render_validation(error.result)
-                except DatasetRepositoryError as error:
-                    st.error(str(error))
-                else:
-                    st.session_state["persisted_dataset"] = restored
-                    st.success(f"Current dataset saved at {saved_at:%Y-%m-%d %H:%M:%S %Z}.")
 
 
 def _repository_from_environment() -> DatasetRepository | None:
@@ -214,62 +290,85 @@ def _restore_persisted_dataset(repository: DatasetRepository | None) -> StoredDa
     return st.session_state.get("persisted_dataset")
 
 
-st.set_page_config(page_title="Data Assistant", page_icon="🗃️", layout="wide")
-st.title("Data Assistant")
-st.caption("Upload a schema to inspect the constraints that will guide data generation.")
+def _render_data_generation_page(repository: DatasetRepository | None, persisted_dataset: StoredDataset | None) -> None:
+    """Render the DDL-to-saved-preview user path from the target design."""
 
-uploaded_ddl = st.file_uploader(
-    "DDL schema",
-    type=["sql", "ddl", "txt"],
-    help="MySQL-like CREATE TABLE statements are supported.",
-)
-repository = _repository_from_environment()
-persisted_dataset = _restore_persisted_dataset(repository)
-if uploaded_ddl is not None:
-    try:
-        ddl_bytes = uploaded_ddl.getvalue()
-        schema = parse_ddl(ddl_bytes.decode("utf-8"))
-    except UnicodeDecodeError:
-        st.error("The uploaded file must be UTF-8 encoded text.")
-    except DDLParseError as error:
-        st.error(f"The DDL could not be parsed: {error}")
-    else:
-        st.success(f"Parsed {len(schema.tables)} tables.")
-        overview = [
-            {
-                "Table": table.name,
-                "Columns": len(table.columns),
-                "Primary key": ", ".join(table.primary_key) or "-",
-                "Foreign keys": len(table.foreign_keys),
-            }
-            for table in schema.tables
-        ]
-        st.dataframe(overview, hide_index=True, use_container_width=True)
-        with st.expander("Parsed schema details"):
-            st.json(schema.as_dict())
-        _render_generation_plan(schema)
-        _render_integration_readiness()
-        _render_draft_generation(schema, hashlib.sha256(ddl_bytes).hexdigest(), repository)
+    st.title("Data Generation")
+    st.caption("Describe the dataset, upload its DDL schema, then generate and save a validated preview.")
+    _render_current_dataset_status(repository, persisted_dataset)
 
-if uploaded_ddl is None and persisted_dataset is not None:
-    st.subheader("Current saved dataset")
-    st.caption(f"Restored from PostgreSQL at {persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.")
-    _render_dataset_preview(
-        persisted_dataset.schema,
-        persisted_dataset,
-        caption="Restored from PostgreSQL.",
-        key_prefix="persisted",
+    st.subheader("Generate data")
+    instruction = st.text_area(
+        "Prompt",
+        placeholder="For example: generate a family-friendly restaurant dataset for Austin, Texas.",
+    )
+    uploaded_ddl = st.file_uploader(
+        "Upload DDL schema",
+        type=["sql", "ddl", "txt"],
+        help="MySQL-like CREATE TABLE statements are supported.",
     )
 
-if repository is None:
-    st.info("PostgreSQL is not configured yet. DDL parsing is available without it.")
-else:
-    try:
-        with repository.engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-    except Exception as error:
-        st.warning(f"PostgreSQL is unavailable: {error}")
+    schema = None
+    schema_digest = None
+    if uploaded_ddl is not None:
+        try:
+            ddl_bytes = uploaded_ddl.getvalue()
+            schema = parse_ddl(ddl_bytes.decode("utf-8"))
+            schema_digest = hashlib.sha256(ddl_bytes).hexdigest()
+        except UnicodeDecodeError:
+            st.error("The uploaded file must be UTF-8 encoded text.")
+        except DDLParseError as error:
+            st.error(f"The DDL could not be parsed: {error}")
+        else:
+            _clear_stale_draft(schema_digest)
+            st.success(f"Parsed {len(schema.tables)} tables.")
+
+    parameters = st.columns(3)
+    with parameters[0]:
+        temperature = st.slider("Temperature", min_value=0.0, max_value=2.0, value=0.7, step=0.1)
+    with parameters[1]:
+        max_output_tokens = st.number_input("Max tokens", min_value=256, max_value=8192, value=4096, step=256)
+    with parameters[2]:
+        rows_per_table = st.number_input("Rows per table", min_value=1, max_value=100, value=10, step=1)
+
+    plan = plan_generation(schema) if schema is not None else None
+    if st.button("Generate", type="primary", disabled=plan is None or not plan.is_supported):
+        _generate_draft(schema, schema_digest, instruction, temperature, max_output_tokens, rows_per_table)
+    if plan is not None and not plan.is_supported:
+        st.warning("Draft generation is unavailable until the unsupported foreign-key cycle is resolved.")
+
+    if schema is not None:
+        _render_draft_and_saved_preview(schema, schema_digest, repository, persisted_dataset)
+        _render_schema_details(schema)
+    elif persisted_dataset is not None:
+        _render_dataset_preview(
+            persisted_dataset.schema,
+            persisted_dataset,
+            caption="Restored from PostgreSQL. Upload a DDL file to generate a replacement.",
+            key_prefix="persisted",
+        )
+
+
+def _render_talk_to_your_data_placeholder(persisted_dataset: StoredDataset | None) -> None:
+    """Reserve the second navigation destination for the stage-10 chat workflow."""
+
+    st.title("Talk to your data")
+    st.info("Conversational analysis will be available in stage 10. This page does not send requests or query the database yet.")
+    if persisted_dataset is None:
+        st.caption("Generate and save a dataset in Data Generation so it will be ready for analysis.")
     else:
-        st.success("Connected to PostgreSQL container.")
-        if st.session_state.get("persisted_dataset_restore_error"):
-            st.warning(f"Current dataset could not be restored: {st.session_state['persisted_dataset_restore_error']}")
+        st.caption(
+            f"A current dataset with {len(persisted_dataset.schema.tables)} tables is ready for the future chat workflow."
+        )
+
+
+st.set_page_config(page_title="Data Assistant", page_icon="🗃️", layout="wide", initial_sidebar_state="expanded")
+_hide_streamlit_deploy_button()
+repository = _repository_from_environment()
+persisted_dataset = _restore_persisted_dataset(repository)
+page = _render_sidebar()
+
+if page == "Data Generation":
+    _render_data_generation_page(repository, persisted_dataset)
+else:
+    _render_talk_to_your_data_placeholder(persisted_dataset)

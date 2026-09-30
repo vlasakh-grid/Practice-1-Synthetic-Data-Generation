@@ -2,58 +2,50 @@
 
 ## Completed
 
-- Stage 6 is complete: drafts are validated before an explicit `Save dataset`
-  action, and the one current dataset persists in PostgreSQL across Streamlit
-  restarts.
-- Public interfaces added: `validate_dataset(schema, draft) ->
-  ValidationResult`, `ValidationError`, `DatasetRepository.save(...)`, and
-  `DatasetRepository.load_current()`.
-- Validation reports table, one-based row, optional field, rule, and message
-  for PK, FK, required, unique, enum, and supported CHECK failures. Unsupported
-  CHECK syntax blocks persistence safely.
-- PostgreSQL uses `generated_data` for restored user tables and
-  `synthetic_app.current_dataset` for canonical schema metadata, digest, and
-  saved time. Replacing a dataset is one transaction.
-- The UI restores the saved dataset without a DDL upload and includes a
-  non-persisting invalid-draft demo for manual error presentation checks.
+- Stage 7 is complete: the Streamlit UI now has sidebar navigation, a target
+  Data Generation workflow, a persisted-dataset status, and an explicit
+  stage-10 placeholder for Talk to your data.
+- The main workflow order is prompt, DDL upload, parameters, Generate, table
+  preview, validation, and Save dataset. Schema, dependency, and integration
+  diagnostics are available in expanders.
+- The Streamlit Deploy control is hidden with the scoped
+  `[data-testid='stDeployButton']` style. Generation, validation, and
+  PostgreSQL persistence contracts are unchanged.
+- Public interfaces are unchanged.
 
 ## Verification
 
-- Command: `python3 -m unittest -v`
-- Result: 24 tests passed and one SQLAlchemy-dependent repository test was
-  skipped because the system Python lacks app dependencies. Coverage includes
-  validation, stored-schema reconstruction, and invalid-write prevention.
-- Command: `.venv/bin/python -m unittest -v && .venv/bin/python -m compileall -q domain tests app.py dataset_repository.py integration_readiness.py llm.py`
-- Result: 25 tests passed and compilation completed successfully with app dependencies installed.
+- Command: `.venv/bin/python -m unittest -v`
+- Result: 26 tests passed, including the Streamlit UI smoke test for sidebar
+  navigation, the generation controls, Deploy-button styling, and the Talk
+  placeholder.
+- Command: `.venv/bin/python -m compileall -q app.py domain tests dataset_repository.py integration_readiness.py llm.py`
+- Result: completed successfully.
 - Command: `docker compose config --quiet`
-- Result: configuration validated. PostgreSQL persistence was not run because Docker Desktop was unavailable.
-- Manual scenario to run after Docker Desktop starts: generate and save each
-  supplied schema, restart Streamlit, verify the restored preview, then select
-  `Load invalid validation demo` and verify the error table and disabled save
-  action. Preserve prior generation-cycle checks for the library schema.
-- Manual result: local Streamlit socket startup is blocked by the execution
-  sandbox (`PermissionError`), so the browser scenario remains unverified.
+- Result: configuration validated.
+- Manual scenario: start the app, confirm Deploy is hidden; upload each DDL,
+  set the prompt and parameters, generate, switch preview tables, save, and
+  restart Streamlit to verify the restored dataset. Open Talk to your data and
+  verify its stage-10 placeholder. Preserve the invalid-draft and library-cycle
+  scenarios from stage 6.
 
 ## Known Limitations
 
-- PostgreSQL transaction and browser persistence flows require Docker Desktop;
-  they were not executable in this environment.
-- CHECK validation supports the safe subset: AND/OR/NOT, comparisons, IN,
-  IS [NOT] NULL, and parentheses. Other parsed SQL checks are displayed as
-  validation errors and cannot be saved.
-- Vertex AI and Langfuse credentials remain required for real semantic
-  generation; unsupported cycles with internal NOT NULL FKs remain blocked.
+- PostgreSQL transaction and browser persistence flows require Docker Desktop.
+- Local Streamlit socket startup was previously blocked by the execution
+  sandbox; use the documented local or Docker workflow for browser verification.
+- CHECK validation supports only the existing safe subset, and Vertex AI plus
+  Langfuse credentials remain required for real semantic generation.
 
 ## Next Steps
 
-1. Implement stage 7's target Data Generation workflow layout while preserving
-   validation, save, and restore behavior.
-2. Use `DatasetRepository` for subsequent atomic dataset edits and exports.
+1. Implement stage 8: quick text edits for the selected table, whole-dataset
+   revalidation, and atomic persistence.
+2. Implement stage 9 CSV and ZIP exports from the persisted current dataset.
 
 ## Important Files
 
-- `domain/validation.py` - safe constraint validation and CHECK compiler.
-- `dataset_repository.py` - PostgreSQL transaction and schema restoration.
-- `app.py` - validation, save, invalid-demo, and restored-preview UI.
-- `tests/test_validation.py` and `tests/test_dataset_repository.py` - stage 6 coverage.
-- `docs/implementation-plan.md` - stage tracking.
+- `app.py` - sidebar navigation, Data Generation workflow, and stage-10 placeholder.
+- `dataset_repository.py` - atomic save and restore of the current dataset.
+- `domain/validation.py` - constraint validation used before persistence.
+- `docs/implementation-plan.md` - completed-stage tracking.
