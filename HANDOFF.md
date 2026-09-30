@@ -14,6 +14,9 @@
   Gemini responses and validation failures leave the persisted dataset intact.
 - Stage 7 UI, generation, validation, persistence, and Talk-to-your-data
   placeholder behavior remain available.
+- The sidebar now follows `task/sample.png`: white surface, compact title,
+  material navigation icons, a rounded active-item highlight, and button-based
+  navigation with no radio controls rendered.
 
 ## Verification
 
@@ -24,6 +27,8 @@
 - Result: completed successfully.
 - Command: `docker compose config --quiet`
 - Result: configuration validated.
+- Command: `.venv/bin/python -m unittest tests.test_app_ui -v`
+- Result: 2 UI smoke tests passed, including sidebar labels and icon formatting.
 - Manual scenario to run with Docker Desktop: save a generated dataset, select
   a table, enter a content-only quick-edit instruction, and click Submit.
   Confirm only selected rows change, related rows remain valid, and the edit

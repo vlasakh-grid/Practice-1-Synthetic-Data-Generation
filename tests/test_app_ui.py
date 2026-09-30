@@ -17,14 +17,18 @@ class AppUiTests(unittest.TestCase):
 
         self.assertFalse(app.exception)
         self.assertEqual(app.sidebar.title[0].value, "Data Assistant")
-        self.assertEqual(app.radio[0].options, ["Data Generation", "Talk to your data"])
+        self.assertEqual(len(app.radio), 0)
+        self.assertEqual(
+            [button.label for button in app.sidebar.button],
+            [":material/storage:  Data Generation", ":material/forum:  Talk to your data"],
+        )
         self.assertEqual(app.title[0].value, "Data Generation")
         self.assertEqual(app.text_area[0].label, "Prompt")
         self.assertEqual(app.file_uploader[0].label, "Upload DDL schema")
-        self.assertEqual(app.button[0].label, "Generate")
+        self.assertEqual(next(button.label for button in app.button if button.label == "Generate"), "Generate")
         self.assertIn("stDeployButton", app.markdown[0].value)
 
-        app.radio[0].set_value("Talk to your data").run()
+        app.sidebar.button[1].click().run()
 
         self.assertFalse(app.exception)
         self.assertEqual(app.title[0].value, "Talk to your data")

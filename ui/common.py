@@ -20,15 +20,84 @@ def hide_streamlit_deploy_button() -> None:
 
 
 def render_sidebar() -> str:
-    """Render the stable application navigation shared by workflow pages."""
+    """Render sidebar navigation without exposing Streamlit radio controls."""
 
+    pages = (
+        ("Data Generation", ":material/storage:  Data Generation", "data-generation"),
+        ("Talk to your data", ":material/forum:  Talk to your data", "talk-to-your-data"),
+    )
+    state_key = "selected-page"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = pages[0][0]
+    active_key = next(key for page, _, key in pages if page == st.session_state[state_key])
+
+    st.markdown(
+        f"""
+        <style>
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"] > div,
+        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+            background: #ffffff !important;
+        }}
+        section[data-testid="stSidebar"] {{
+            min-width: 19rem !important;
+            width: 19rem !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+            padding: 1rem 1.5rem 0 !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
+            display: none !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+            padding-top: 1rem !important;
+        }}
+        section[data-testid="stSidebar"] h1 {{
+            color: #172033 !important;
+            font-size: 1.5rem !important;
+            font-weight: 650 !important;
+            letter-spacing: -0.02em;
+            margin: 0.25rem 0 1.25rem;
+        }}
+        section[data-testid="stSidebar"] .stButton > button {{
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 0.55rem !important;
+            box-shadow: none !important;
+            color: #273247 !important;
+            font-size: 0.98rem !important;
+            font-weight: 400 !important;
+            justify-content: flex-start !important;
+            min-height: 2.95rem !important;
+            padding: 0.58rem 0.72rem !important;
+            text-align: left !important;
+        }}
+        section[data-testid="stSidebar"] .stButton > button:hover {{
+            background: #f5f6f8 !important;
+        }}
+        section[data-testid="stSidebar"] .st-key-sidebar-nav-{active_key} button {{
+            background: #eef0f3 !important;
+            color: #172033 !important;
+            font-weight: 600 !important;
+        }}
+        section[data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] p {{
+            color: inherit !important;
+            margin: 0 !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     with st.sidebar:
         st.title("Data Assistant")
-        return st.radio(
-            "Navigation",
-            ("Data Generation", "Talk to your data"),
-            label_visibility="collapsed",
-        )
+        for page, label, key in pages:
+            st.button(
+                label,
+                key=f"sidebar-nav-{key}",
+                use_container_width=True,
+                on_click=lambda value=page: st.session_state.__setitem__(state_key, value),
+            )
+    return st.session_state[state_key]
 
 
 def render_validation(result: ValidationResult) -> None:
