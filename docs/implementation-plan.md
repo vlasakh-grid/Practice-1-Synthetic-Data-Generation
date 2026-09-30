@@ -68,18 +68,6 @@ Every stage must add a user-visible capability that can be manually verified in 
     - Add an in-app usage guide and complete the README with Docker Desktop, Vertex AI, Langfuse, and end-to-end demo instructions.
     - Manual check: confirm a normal analytics question succeeds while data-changing, secret-seeking, and oversized requests are safely rejected without modifying the dataset.
 
-## Required Progress Log
-
-After completing every stage, update `LOG.md` in the same change with:
-
-- the stage number, title, and completion status;
-- delivered components and changed public interfaces;
-- automated-test results and the exact manual verification scenario;
-- known limitations, configuration requirements, and relevant context for the next agent;
-- the next unfinished stage and its recommended scope.
-
-Before starting a stage, the next agent must read `LOG.md` and this plan, then preserve all previously confirmed manual scenarios unless it re-verifies them.
-
 ## Agreed Defaults
 
 - UI framework: Streamlit.
