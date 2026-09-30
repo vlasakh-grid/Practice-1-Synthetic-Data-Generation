@@ -12,6 +12,7 @@ from dataset_repository import DatasetRepositoryError, InvalidDatasetError
 from domain.dependency_planner import plan_generation
 from domain.ddl_parser import DDLParseError, parse_ddl
 from domain.draft_generation import DraftDataset, DraftGenerationError, GenerationConfig, GenerationProgress
+from domain.table_editing import TableEditError
 from ui.common import render_dataset_preview, render_validation
 from ui.diagnostics import render_schema_details
 
@@ -88,12 +89,19 @@ def _generate_draft(runtime: AppRuntime, schema, schema_digest: str, instruction
         st.success("Draft dataset is ready for preview.")
 
 
-def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: str) -> None:
+def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: str) -> str | None:
     """Validate a draft and surface the saved result once persistence succeeds."""
 
     draft = st.session_state.get("draft_dataset")
     if draft is None or st.session_state.get("draft_schema_digest") != schema_digest:
-        return
+        if runtime.persisted_dataset is None or runtime.persisted_dataset.schema_digest != schema_digest:
+            return None
+        return render_dataset_preview(
+            runtime.persisted_dataset.schema,
+            runtime.persisted_dataset,
+            caption=f"Saved in PostgreSQL at {runtime.persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.",
+            key_prefix="saved",
+        )
 
     validation = runtime.dataset_service.validate(schema, draft)
     saved_preview = (
@@ -102,14 +110,14 @@ def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: 
         and validation.is_valid
     )
     if saved_preview:
-        render_dataset_preview(
+        selected_table = render_dataset_preview(
             runtime.persisted_dataset.schema,
             runtime.persisted_dataset,
             caption=f"Saved in PostgreSQL at {runtime.persisted_dataset.saved_at:%Y-%m-%d %H:%M:%S %Z}.",
             key_prefix="saved",
         )
     else:
-        render_dataset_preview(
+        selected_table = render_dataset_preview(
             schema,
             draft,
             caption="In-memory draft; changes are not saved yet.",
@@ -134,6 +142,62 @@ def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: 
         if st.button("Load invalid validation demo", key="invalid-draft-demo"):
             st.session_state["draft_dataset"] = _invalid_demo_draft(schema, draft)
             st.rerun()
+    return selected_table
+
+
+def _render_quick_edit(runtime: AppRuntime, selected_table: str, temperature: float, max_output_tokens: int) -> None:
+    """Edit the saved selected table while keeping failed candidates out of PostgreSQL."""
+
+    current = runtime.persisted_dataset
+    st.subheader("Quick edit")
+    st.caption(f"Apply a text instruction to {selected_table}. Row count, primary keys, and foreign keys are preserved.")
+    if current is None or runtime.repository is None:
+        st.info("Save a dataset in PostgreSQL before applying a quick edit.")
+        return
+
+    with st.form("quick-table-edit"):
+        instruction = st.text_area(
+            "Quick edit instruction",
+            placeholder=f"For example: make the {selected_table} entries more family-friendly.",
+        )
+        submitted = st.form_submit_button("Submit", type="primary")
+    if not submitted:
+        return
+    if not instruction.strip():
+        st.warning("Enter an instruction before submitting a table edit.")
+        return
+
+    status = st.status(f"Applying edit to {selected_table}.", expanded=False)
+    try:
+        saved = runtime.dataset_service.apply_edit(
+            current,
+            selected_table,
+            instruction,
+            temperature=temperature,
+            max_output_tokens=int(max_output_tokens),
+        )
+    except InvalidDatasetError as error:
+        status.update(label="Table edit failed validation; saved data was not changed.", state="error")
+        render_validation(error.result)
+    except (TableEditError, DatasetRepositoryError, ValueError) as error:
+        status.update(label="Table edit was not applied.", state="error")
+        st.error(str(error))
+    else:
+        runtime.persisted_dataset = saved
+        st.session_state["persisted_dataset"] = saved
+        if st.session_state.get("draft_schema_digest") == saved.schema_digest:
+            st.session_state["draft_dataset"] = DraftDataset(
+                rows_by_table={name: tuple(dict(row) for row in rows) for name, rows in saved.rows_by_table.items()},
+                plan=plan_generation(saved.schema),
+                config=GenerationConfig(
+                    instruction=instruction,
+                    temperature=temperature,
+                    max_output_tokens=int(max_output_tokens),
+                    rows_per_table=max(1, len(saved.rows_for(selected_table))),
+                ),
+            )
+        status.update(label="Table edit saved in PostgreSQL.", state="complete")
+        st.rerun()
 
 
 def render_data_generation(runtime: AppRuntime) -> None:
@@ -186,12 +250,16 @@ def render_data_generation(runtime: AppRuntime) -> None:
         st.warning("Draft generation is unavailable until the unsupported foreign-key cycle is resolved.")
 
     if schema is not None:
-        _render_draft_and_saved_preview(runtime, schema, schema_digest)
+        selected_table = _render_draft_and_saved_preview(runtime, schema, schema_digest)
+        if selected_table is not None:
+            _render_quick_edit(runtime, selected_table, temperature, int(max_output_tokens))
         render_schema_details(schema)
     elif runtime.persisted_dataset is not None:
-        render_dataset_preview(
+        selected_table = render_dataset_preview(
             runtime.persisted_dataset.schema,
             runtime.persisted_dataset,
             caption="Restored from PostgreSQL. Upload a DDL file to generate a replacement.",
             key_prefix="persisted",
         )
+        if selected_table is not None:
+            _render_quick_edit(runtime, selected_table, temperature, int(max_output_tokens))

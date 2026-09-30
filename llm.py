@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterator
+from dataclasses import asdict
 from typing import Any
 
 from google import genai
@@ -16,6 +17,7 @@ from google.genai import types
 from langfuse import Langfuse
 
 from domain.draft_generation import SemanticGenerationRequest
+from domain.table_editing import TableEditError, TableEditRequest
 
 
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -199,6 +201,75 @@ class GeminiSemanticValueGenerator:
             if on_text is not None:
                 on_text(text)
             yield text
+
+
+class GeminiTableEditor:
+    """Gemini adapter for structured, one-table revisions of saved data."""
+
+    def edit(self, request: TableEditRequest) -> list[dict[str, Any]]:
+        response_schema = {
+            "type": "OBJECT",
+            "properties": {
+                "rows": {
+                    "type": "ARRAY",
+                    "items": {
+                        "type": "OBJECT",
+                        "properties": {
+                            column.name: _edit_column_schema(column.postgres_type, column.nullable)
+                            for column in request.table.columns
+                        },
+                        "required": [column.name for column in request.table.columns],
+                    },
+                }
+            },
+            "required": ["rows"],
+        }
+        protected_fields = sorted(
+            set(request.table.primary_key).union(
+                column for foreign_key in request.table.foreign_keys for column in foreign_key.columns
+            )
+        )
+        prompt = (
+            "Revise the supplied synthetic data for exactly one database table. "
+            "Return only JSON matching the response schema, with one complete row for every input row in the same order. "
+            "Do not add, remove, reorder, or merge rows. Keep every primary-key and foreign-key value exactly unchanged. "
+            "Apply only the user's requested content changes and obey all listed SQL constraints. "
+            "Use fictional data; do not introduce real personal data.\n"
+            f"Table schema: {json.dumps(asdict(request.table), default=str)}\n"
+            f"Protected fields: {json.dumps(protected_fields)}\n"
+            f"Current rows: {json.dumps(request.rows, default=str)}\n"
+            f"User instruction: {request.instruction.strip()}"
+        )
+        try:
+            payload = generate_json(
+                prompt,
+                response_schema,
+                temperature=request.temperature,
+                max_output_tokens=request.max_output_tokens,
+            )
+        except Exception as error:
+            raise TableEditError(f"Gemini could not produce a table edit: {error}") from error
+        rows = payload.get("rows") if isinstance(payload, dict) else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise TableEditError("Gemini did not return a JSON object with a rows array.")
+        return rows
+
+
+def _edit_column_schema(postgres_type: str, nullable: bool) -> dict[str, Any]:
+    """Use JSON types that preserve database values as closely as Gemini allows."""
+
+    column_type = postgres_type.upper()
+    if column_type.startswith(("SMALLINT", "INT", "BIGINT")):
+        value_type = "INTEGER"
+    elif column_type.startswith(("NUMERIC", "DECIMAL", "REAL", "DOUBLE", "FLOAT")):
+        value_type = "NUMBER"
+    elif "BOOL" in column_type:
+        value_type = "BOOLEAN"
+    elif "JSON" in column_type:
+        value_type = "OBJECT"
+    else:
+        value_type = "STRING"
+    return {"type": value_type, "nullable": nullable}
 
 
 def stream_text(

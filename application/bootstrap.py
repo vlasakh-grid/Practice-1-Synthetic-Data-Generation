@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from application.dataset_service import DatasetService
 from application.runtime import AppRuntime
 from dataset_repository import DatasetRepository, DatasetRepositoryError
-from llm import GeminiSemanticValueGenerator
+from llm import GeminiSemanticValueGenerator, GeminiTableEditor
 
 
 def _repository_from_environment() -> DatasetRepository | None:
@@ -22,7 +22,7 @@ def build_runtime() -> AppRuntime:
 
     load_dotenv()
     repository = _repository_from_environment()
-    service = DatasetService(repository, GeminiSemanticValueGenerator())
+    service = DatasetService(repository, GeminiSemanticValueGenerator(), GeminiTableEditor())
     if repository is None:
         return AppRuntime(repository=repository, dataset_service=service)
 

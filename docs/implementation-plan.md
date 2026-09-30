@@ -48,7 +48,7 @@ Every stage must add a user-visible capability that can be manually verified in 
    - Preserve the generation and persistence contracts from earlier stages.
    - Manual check: complete the DDL-upload-to-saved-preview workflow entirely through the target screen.
 
-8. [ ] **Edit a selected table through text instructions**
+8. [x] **Edit a selected table through text instructions**
    - Add quick-edit instructions and a Submit action for the selected table.
    - Apply a Gemini structured change, revalidate the whole dataset, persist it atomically, and refresh the preview.
    - Manual check: request a change to one table and confirm the changed rows and valid related data.

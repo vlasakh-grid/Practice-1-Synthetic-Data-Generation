@@ -41,12 +41,12 @@ def render_validation(result: ValidationResult) -> None:
         st.dataframe([error.as_dict() for error in result.errors], hide_index=True, use_container_width=True)
 
 
-def render_dataset_preview(schema: Schema, dataset: Any, *, caption: str, key_prefix: str) -> None:
-    """Show one selected table from a draft or a saved dataset."""
+def render_dataset_preview(schema: Schema, dataset: Any, *, caption: str, key_prefix: str) -> str | None:
+    """Show one selected table from a draft or a saved dataset and return its name."""
 
     table_names = [table.name for table in schema.tables]
     if not table_names:
-        return
+        return None
     header, selector = st.columns((4, 1))
     with header:
         st.subheader("Data preview")
@@ -54,3 +54,4 @@ def render_dataset_preview(schema: Schema, dataset: Any, *, caption: str, key_pr
         selected_table = st.selectbox("Preview table", table_names, key=f"{key_prefix}-preview-table")
     st.caption(f"{len(dataset.rows_for(selected_table))} rows in {selected_table}. {caption}")
     st.dataframe(dataset.rows_for(selected_table), hide_index=True, use_container_width=True)
+    return selected_table

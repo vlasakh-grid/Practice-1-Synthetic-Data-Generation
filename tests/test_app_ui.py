@@ -29,3 +29,29 @@ class AppUiTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.title[0].value, "Talk to your data")
         self.assertIn("stage 10", app.info[0].value)
+
+    def test_saved_dataset_shows_the_selected_table_quick_editor(self) -> None:
+        app = AppTest.from_string(
+            '''
+from datetime import datetime, timezone
+from application.dataset_service import DatasetService
+from application.runtime import AppRuntime
+from dataset_repository import StoredDataset
+from domain.ddl_parser import parse_ddl
+from ui.data_generation import render_data_generation
+
+class UnusedGenerator:
+    def generate(self, request, *, on_text=None):
+        raise AssertionError("not used")
+
+schema = parse_ddl("CREATE TABLE items (id INT PRIMARY KEY, name TEXT NOT NULL);")
+saved = StoredDataset(schema, {"items": ({"id": 1, "name": "Original"},)}, "digest", datetime(2026, 9, 30, tzinfo=timezone.utc))
+runtime = AppRuntime(repository=object(), dataset_service=DatasetService(None, UnusedGenerator()), persisted_dataset=saved)
+render_data_generation(runtime)
+'''
+        )
+        app.run()
+
+        self.assertFalse(app.exception)
+        self.assertIn("Quick edit instruction", [area.label for area in app.text_area])
+        self.assertIn("Submit", [button.label for button in app.button])
