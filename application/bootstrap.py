@@ -39,12 +39,19 @@ def _semantic_generator_from_environment() -> tuple[SemanticValueGenerator, str]
     raise RuntimeError("SEMANTIC_GENERATOR must be 'gemini' or 'local'.")
 
 
+def _notices_enabled_from_environment() -> bool:
+
+    value = os.getenv("DISABLE_WARNINGS", "false").strip().lower()
+    return value not in {"1", "true", "yes", "on"}
+
+
 def build_runtime() -> AppRuntime:
     """Create infrastructure gateways and restore the current dataset."""
 
     load_dotenv()
     repository = _repository_from_environment()
     semantic_generator, generation_mode = _semantic_generator_from_environment()
+    notices_enabled = _notices_enabled_from_environment()
     service = DatasetService(repository, semantic_generator, GeminiTableEditor())
     chat_service = _chat_service_from_environment()
     if repository is None:
@@ -53,6 +60,7 @@ def build_runtime() -> AppRuntime:
             dataset_service=service,
             chat_service=chat_service,
             generation_mode=generation_mode,
+            notices_enabled=notices_enabled,
         )
 
     try:
@@ -64,6 +72,7 @@ def build_runtime() -> AppRuntime:
             chat_service=chat_service,
             restore_error=str(error),
             generation_mode=generation_mode,
+            notices_enabled=notices_enabled,
         )
     return AppRuntime(
         repository=repository,
@@ -71,4 +80,5 @@ def build_runtime() -> AppRuntime:
         chat_service=chat_service,
         persisted_dataset=persisted_dataset,
         generation_mode=generation_mode,
+        notices_enabled=notices_enabled,
     )

@@ -10,6 +10,18 @@ from domain.schema import Schema
 from domain.validation import ValidationResult
 
 
+def render_info(message: str, *, enabled: bool = True) -> None:
+
+    if enabled:
+        st.info(message)
+
+
+def render_warning(message: str, *, enabled: bool = True) -> None:
+
+    if enabled:
+        st.warning(message)
+
+
 def hide_streamlit_deploy_button() -> None:
     """Hide only Streamlit's hosting control, not the rest of its toolbar."""
 

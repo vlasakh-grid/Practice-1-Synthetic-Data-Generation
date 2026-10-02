@@ -14,7 +14,7 @@ from domain.dependency_planner import plan_generation
 from domain.ddl_parser import DDLParseError, parse_ddl
 from domain.draft_generation import DraftDataset, DraftGenerationError, GenerationConfig, GenerationProgress
 from domain.table_editing import TableEditError
-from ui.common import render_dataset_preview, render_validation
+from ui.common import render_dataset_preview, render_info, render_validation, render_warning
 from ui.diagnostics import render_schema_details
 
 
@@ -47,11 +47,20 @@ def _render_current_dataset_status(runtime: AppRuntime) -> None:
             f"({len(runtime.persisted_dataset.schema.tables)} tables)."
         )
     elif runtime.repository is None:
-        st.info("PostgreSQL is not configured. You can generate a draft, but cannot save it yet.")
+        render_info(
+            "PostgreSQL is not configured. You can generate a draft, but cannot save it yet.",
+            enabled=runtime.notices_enabled,
+        )
     elif runtime.restore_error:
-        st.warning(f"Current dataset could not be restored: {runtime.restore_error}")
+        render_warning(
+            f"Current dataset could not be restored: {runtime.restore_error}",
+            enabled=runtime.notices_enabled,
+        )
     else:
-        st.info("No saved dataset yet. Generate and validate a draft to save the current dataset.")
+        render_info(
+            "No saved dataset yet. Generate and validate a draft to save the current dataset.",
+            enabled=runtime.notices_enabled,
+        )
 
 
 def _generate_draft(runtime: AppRuntime, schema, schema_digest: str, instruction: str, temperature: float, max_output_tokens: int, rows_per_table: int) -> None:
@@ -132,7 +141,7 @@ def _render_draft_and_saved_preview(runtime: AppRuntime, schema, schema_digest: 
     actions, demo = st.columns((1, 1))
     with actions:
         if runtime.repository is None:
-            st.info("Configure PostgreSQL to save a validated dataset.")
+            render_info("Configure PostgreSQL to save a validated dataset.", enabled=runtime.notices_enabled)
         elif st.button("Save dataset", disabled=not validation.is_valid, type="primary"):
             try:
                 st.session_state["persisted_dataset"] = runtime.dataset_service.save(schema, draft, schema_digest)
@@ -156,7 +165,7 @@ def _render_quick_edit(runtime: AppRuntime, selected_table: str, temperature: fl
     st.subheader("Quick edit")
     st.caption(f"Apply a text instruction to {selected_table}. Row count, primary keys, and foreign keys are preserved.")
     if current is None or runtime.repository is None:
-        st.info("Save a dataset in PostgreSQL before applying a quick edit.")
+        render_info("Save a dataset in PostgreSQL before applying a quick edit.", enabled=runtime.notices_enabled)
         return
 
     with st.form("quick-table-edit"):
@@ -168,7 +177,7 @@ def _render_quick_edit(runtime: AppRuntime, selected_table: str, temperature: fl
     if not submitted:
         return
     if not instruction.strip():
-        st.warning("Enter an instruction before submitting a table edit.")
+        render_warning("Enter an instruction before submitting a table edit", enabled=runtime.notices_enabled)
         return
 
     status = st.status(f"Applying edit to {selected_table}.", expanded=False)
@@ -238,9 +247,10 @@ def render_data_generation(runtime: AppRuntime) -> None:
     st.caption("Describe the dataset, upload its DDL schema, then generate and save a validated preview.")
     _render_current_dataset_status(runtime)
     if runtime.generation_mode == "Local deterministic":
-        st.info(
+        render_info(
             "Local deterministic generation is enabled: Vertex AI is not used. "
-            "The prompt and temperature do not affect the placeholder text values."
+            "The prompt and temperature do not affect the placeholder text values.",
+            enabled=runtime.notices_enabled,
         )
 
     st.subheader("Generate data")
@@ -283,13 +293,16 @@ def render_data_generation(runtime: AppRuntime) -> None:
     if st.button("Generate", type="primary", disabled=not plan_supported):
         _generate_draft(runtime, schema, schema_digest, instruction, temperature, max_output_tokens, rows_per_table)
     if schema is not None and not plan_supported:
-        st.warning("Draft generation is unavailable until the unsupported foreign-key cycle is resolved.")
+        render_warning(
+            "Draft generation is unavailable until the unsupported foreign-key cycle is resolved.",
+            enabled=runtime.notices_enabled,
+        )
 
     if schema is not None:
         selected_table = _render_draft_and_saved_preview(runtime, schema, schema_digest)
         if selected_table is not None:
             _render_quick_edit(runtime, selected_table, temperature, int(max_output_tokens))
-        render_schema_details(schema)
+        render_schema_details(schema, notices_enabled=runtime.notices_enabled)
     elif runtime.persisted_dataset is not None:
         selected_table = render_dataset_preview(
             runtime.persisted_dataset.schema,

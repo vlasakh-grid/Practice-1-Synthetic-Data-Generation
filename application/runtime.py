@@ -19,3 +19,4 @@ class AppRuntime:
     restore_error: str | None = None
     chat_service: DataChatService | None = None
     generation_mode: str = "Gemini (Vertex AI)"
+    notices_enabled: bool = True

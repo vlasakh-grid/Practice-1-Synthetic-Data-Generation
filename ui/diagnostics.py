@@ -6,9 +6,10 @@ import streamlit as st
 
 from domain.dependency_planner import plan_generation
 from integration_readiness import inspect_integration_readiness
+from ui.common import render_info, render_warning
 
 
-def render_generation_plan(schema) -> None:
+def render_generation_plan(schema, *, notices_enabled: bool = True) -> None:
     """Render the deterministic dependency plan."""
 
     plan = plan_generation(schema)
@@ -42,12 +43,12 @@ def render_generation_plan(schema) -> None:
         for cycle in plan.cycles:
             tables = " → ".join((*cycle.tables, cycle.tables[0]))
             if cycle.supported:
-                st.info(f"{tables}: {cycle.status}")
+                render_info(f"{tables}: {cycle.status}", enabled=notices_enabled)
             else:
-                st.warning(f"{tables}: {cycle.status}")
+                render_warning(f"{tables}: {cycle.status}", enabled=notices_enabled)
 
 
-def render_integration_readiness() -> None:
+def render_integration_readiness(*, notices_enabled: bool = True) -> None:
     """Render configuration status without contacting Gemini or Langfuse."""
 
     st.caption("Configuration only — no network requests are made and secrets are never displayed.")
@@ -56,10 +57,13 @@ def render_integration_readiness() -> None:
         if check.configured:
             st.success(f"{check.name}: configured — {details}")
         else:
-            st.warning(f"{check.name}: missing {', '.join(check.missing_variables)} — {details}")
+            render_warning(
+                f"{check.name}: missing {', '.join(check.missing_variables)} — {details}",
+                enabled=notices_enabled,
+            )
 
 
-def render_schema_details(schema) -> None:
+def render_schema_details(schema, *, notices_enabled: bool = True) -> None:
     """Keep diagnostics available without interrupting the main workflow."""
 
     overview = [
@@ -75,6 +79,6 @@ def render_schema_details(schema) -> None:
         st.dataframe(overview, hide_index=True, use_container_width=True)
         st.json(schema.as_dict())
     with st.expander("Generation plan"):
-        render_generation_plan(schema)
+        render_generation_plan(schema, notices_enabled=notices_enabled)
     with st.expander("Integration readiness"):
-        render_integration_readiness()
+        render_integration_readiness(notices_enabled=notices_enabled)

@@ -9,6 +9,7 @@ import streamlit as st
 from application.data_chat_service import ChatExecutionError, ChatUnavailableError
 from application.runtime import AppRuntime
 from domain.data_chat import ChatSafetyError
+from ui.common import render_info, render_warning
 
 
 _HISTORY_KEY = "data-chat-history"
@@ -22,7 +23,10 @@ def render_talk_to_your_data(runtime: AppRuntime) -> None:
     _render_usage_guide()
     current = runtime.persisted_dataset
     if current is None:
-        st.info("Save a dataset in Data Generation before starting an analysis conversation.")
+        render_info(
+            "Save a dataset in Data Generation before starting an analysis conversation.",
+            enabled=runtime.notices_enabled,
+        )
         st.caption("Chat history is session-only and is never saved to PostgreSQL.")
         return
 
@@ -66,7 +70,7 @@ def _answer_question(runtime: AppRuntime, current, question: str) -> None:
         message = response if isinstance(response, str) else "".join(str(value) for value in response)
     except ChatSafetyError as error:
         message = str(error)
-        st.warning(message)
+        render_warning(message, enabled=runtime.notices_enabled)
         _append_message("assistant", message)
         return
     except (ChatUnavailableError, ChatExecutionError) as error:
