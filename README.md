@@ -12,8 +12,8 @@ A Dockerized Streamlit assistant that generates valid synthetic data from DDL, l
 
 1. Install and start Docker Desktop.
 2. Copy `.env.example` to `.env`. Before the first startup, replace the three `change-me-before-starting` database passwords with distinct local values.
-3. Set `GOOGLE_CLOUD_PROJECT`, optionally change the Vertex AI location/model, and set the Langfuse variables in `.env`.
-4. For Docker Vertex AI authentication, create the ignored `secrets/` folder, place a minimally privileged service-account JSON file there as `vertex-service-account.json`, and set `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-service-account.json`. The compose file mounts this directory read-only. For a host-local run, `gcloud auth application-default login` is also supported by Vertex AI ADC.
+3. The default `SEMANTIC_GENERATOR=local` runs deterministic draft generation with no Vertex AI or Langfuse access. To use Gemini instead, set `SEMANTIC_GENERATOR=gemini`, then set `GOOGLE_CLOUD_PROJECT`, optionally change the Vertex AI location/model, and set the Langfuse variables in `.env`.
+4. When using `SEMANTIC_GENERATOR=gemini` in Docker, create the ignored `secrets/` folder, place a minimally privileged service-account JSON file there as `vertex-service-account.json`, and set `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-service-account.json`. The compose file mounts this directory read-only. For a host-local Gemini run, `gcloud auth application-default login` is also supported by Vertex AI ADC.
 5. Run `docker compose up --build`, then open [http://localhost:8501](http://localhost:8501).
 
 PostgreSQL data lives in the `postgres_data` Docker volume; no host PostgreSQL installation is required. The initial database setup creates a non-superuser writer role and a separate `synthetic_reader` role. The app uses the writer for generation/editing and the reader only for Talk to your data.
@@ -22,7 +22,7 @@ The role-init script runs only for a new PostgreSQL volume. If this project was 
 
 ## Vertex AI and Langfuse
 
-Gemini uses the Google GenAI SDK with Vertex AI authentication. The configured identity needs permission to call the selected Gemini model in the configured GCP project. Langfuse is used for model-workflow observability; configure `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally `LANGFUSE_HOST`. Never commit `.env`, the `secrets/` directory, service-account JSON, or API keys. The UI and Langfuse chat trace exclude database URLs, credentials, raw tool arguments, and returned data rows.
+Gemini uses the Google GenAI SDK with Vertex AI authentication only when `SEMANTIC_GENERATOR=gemini`. The configured identity needs permission to call the selected Gemini model in the configured GCP project. Langfuse is used for model-workflow observability in that mode; configure `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally `LANGFUSE_HOST`. Never commit `.env`, the `secrets/` directory, service-account JSON, or API keys. The UI and Langfuse chat trace exclude database URLs, credentials, raw tool arguments, and returned data rows.
 
 ## Generate, save, edit, and export
 
@@ -54,9 +54,22 @@ The chat refuses SQL text, DDL/DML, configuration or credential requests, and re
 5. Ask `UPDATE Orders SET status = 'cancelled'`, ask for a database password, and ask for the entire dataset. Show the friendly refusal in each case.
 6. Return to Data Generation and confirm the preview is unchanged. Restart the Streamlit app: the dataset remains, while the chat history is empty.
 
-## Local UI without Docker
+## Local UI without Docker or PostgreSQL
 
-For a host-local Streamlit run, use the project virtual environment:
+For a draft-only local demo, set the following in `.env` (or omit it; `local`
+is the default):
+
+```env
+SEMANTIC_GENERATOR=local
+```
+
+This mode does not contact Vertex AI or Langfuse. It supports DDL parsing,
+dependency planning, deterministic draft generation, previews, and validation.
+It intentionally does not save datasets, edit saved tables, export saved data,
+or answer data-chat questions because PostgreSQL is not configured. Prompt and
+temperature values do not change deterministic placeholder text.
+
+Use the project virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -65,4 +78,10 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Set both `DATABASE_URL` (writer) and `ANALYTICS_DATABASE_URL` (reader) when running outside Compose. The `streamlit` executable is provided by `requirements.txt`; it is not expected to exist on a fresh system Python.
+Leave `DATABASE_URL` and `ANALYTICS_DATABASE_URL` unset for this draft-only
+mode. For the complete host-local workflow, set those URLs for a local
+PostgreSQL instance. Set `SEMANTIC_GENERATOR=gemini` to enable Gemini-powered
+generation; editing and data chat
+also require configured Vertex AI credentials. The `streamlit` executable is
+provided by `requirements.txt`; it is not expected to exist on a fresh system
+Python.

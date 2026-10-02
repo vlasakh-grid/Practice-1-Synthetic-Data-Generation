@@ -18,3 +18,4 @@ class AppRuntime:
     persisted_dataset: StoredDataset | None = None
     restore_error: str | None = None
     chat_service: DataChatService | None = None
+    generation_mode: str = "Gemini (Vertex AI)"

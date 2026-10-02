@@ -28,6 +28,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-synthetic_writer}:${APP_DB_PASSWORD:-change-me-before-starting}@postgres:5432/${POSTGRES_DB:-synthetic_data}
       ANALYTICS_DATABASE_URL: postgresql+psycopg://${ANALYTICS_DB_USER:-synthetic_reader}:${ANALYTICS_DB_PASSWORD:-change-me-before-starting}@postgres:5432/${POSTGRES_DB:-synthetic_data}
       ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-synthetic_reader}
+      SEMANTIC_GENERATOR: ${SEMANTIC_GENERATOR:-local}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}

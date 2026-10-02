@@ -237,6 +237,11 @@ def render_data_generation(runtime: AppRuntime) -> None:
     st.title("Data Generation")
     st.caption("Describe the dataset, upload its DDL schema, then generate and save a validated preview.")
     _render_current_dataset_status(runtime)
+    if runtime.generation_mode == "Local deterministic":
+        st.info(
+            "Local deterministic generation is enabled: Vertex AI is not used. "
+            "The prompt and temperature do not affect the placeholder text values."
+        )
 
     st.subheader("Generate data")
     instruction = st.text_area(

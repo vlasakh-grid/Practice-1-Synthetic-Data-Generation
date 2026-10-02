@@ -10,6 +10,7 @@ from application.data_chat_service import DataChatService
 from application.dataset_service import DatasetService
 from application.runtime import AppRuntime
 from dataset_repository import AnalyticsRepository, DatasetRepository, DatasetRepositoryError
+from domain.draft_generation import LocalSemanticValueGenerator, SemanticValueGenerator
 from llm import GeminiAnalyticsChat, GeminiSemanticValueGenerator, GeminiTableEditor
 
 
@@ -27,15 +28,32 @@ def _chat_service_from_environment() -> DataChatService:
     return DataChatService(repository, GeminiAnalyticsChat())
 
 
+def _semantic_generator_from_environment() -> tuple[SemanticValueGenerator, str]:
+    """Choose local deterministic values by default; Gemini is opt-in."""
+
+    mode = os.getenv("SEMANTIC_GENERATOR", "local").strip().lower()
+    if mode in {"local", "deterministic"}:
+        return LocalSemanticValueGenerator(), "Local deterministic"
+    if mode in {"gemini", "vertex"}:
+        return GeminiSemanticValueGenerator(), "Gemini (Vertex AI)"
+    raise RuntimeError("SEMANTIC_GENERATOR must be 'gemini' or 'local'.")
+
+
 def build_runtime() -> AppRuntime:
     """Create infrastructure gateways and restore the current dataset."""
 
     load_dotenv()
     repository = _repository_from_environment()
-    service = DatasetService(repository, GeminiSemanticValueGenerator(), GeminiTableEditor())
+    semantic_generator, generation_mode = _semantic_generator_from_environment()
+    service = DatasetService(repository, semantic_generator, GeminiTableEditor())
     chat_service = _chat_service_from_environment()
     if repository is None:
-        return AppRuntime(repository=repository, dataset_service=service, chat_service=chat_service)
+        return AppRuntime(
+            repository=repository,
+            dataset_service=service,
+            chat_service=chat_service,
+            generation_mode=generation_mode,
+        )
 
     try:
         persisted_dataset = service.restore_current()
@@ -45,10 +63,12 @@ def build_runtime() -> AppRuntime:
             dataset_service=service,
             chat_service=chat_service,
             restore_error=str(error),
+            generation_mode=generation_mode,
         )
     return AppRuntime(
         repository=repository,
         dataset_service=service,
         chat_service=chat_service,
         persisted_dataset=persisted_dataset,
+        generation_mode=generation_mode,
     )

@@ -5,9 +5,11 @@ from domain.ddl_parser import parse_ddl
 from domain.draft_generation import (
     DraftGenerationError,
     GenerationConfig,
+    LocalSemanticValueGenerator,
     SemanticGenerationRequest,
     generate_draft,
 )
+from domain.validation import validate_dataset
 
 
 TASK_DIR = Path(__file__).parents[1] / "task"
@@ -125,6 +127,33 @@ class DraftGenerationTests(unittest.TestCase):
         self.assertEqual(request.instruction, "Family-friendly venues in Austin")
         self.assertEqual(request.temperature, 1.2)
         self.assertEqual(request.max_output_tokens, 2048)
+
+    def test_local_semantic_generator_creates_deterministic_text_without_an_llm(self) -> None:
+        schema = parse_ddl((TASK_DIR / "restrurants_schema.ddl").read_text())
+        events = []
+
+        draft = generate_draft(
+            schema,
+            GenerationConfig(rows_per_table=2),
+            LocalSemanticValueGenerator(),
+            on_progress=events.append,
+        )
+
+        self.assertEqual(draft.rows_for("Restaurants")[0]["name"], "Restaurants name 1")
+        self.assertEqual(draft.rows_for("Restaurants")[1]["name"], "Restaurants name 2")
+        self.assertTrue(any("Receiving structured values" in event.message for event in events))
+
+    def test_local_semantic_generator_produces_valid_drafts_for_all_supplied_schemas(self) -> None:
+        for path in sorted(TASK_DIR.glob("*.ddl")):
+            with self.subTest(schema=path.name):
+                schema = parse_ddl(path.read_text())
+                draft = generate_draft(
+                    schema,
+                    GenerationConfig(rows_per_table=3),
+                    LocalSemanticValueGenerator(),
+                )
+
+                self.assertTrue(validate_dataset(schema, draft).is_valid)
 
 if __name__ == "__main__":
     unittest.main()

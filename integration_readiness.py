@@ -22,15 +22,23 @@ def inspect_integration_readiness(env: Mapping[str, str] | None = None) -> tuple
     """Inspect configuration only; this function never contacts external services."""
 
     values = os.environ if env is None else env
+    semantic_mode = values.get("SEMANTIC_GENERATOR", "local").strip().lower()
     project = values.get("GOOGLE_CLOUD_PROJECT", "").strip()
     model = values.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
     location = values.get("GOOGLE_CLOUD_LOCATION", "us-central1").strip() or "us-central1"
-    gemini = IntegrationReadiness(
-        name="Gemini (Vertex AI)",
-        configured=bool(project),
-        details={"Project": project or "Not set", "Model": model, "Location": location},
-        missing_variables=("GOOGLE_CLOUD_PROJECT",) if not project else (),
-    )
+    if semantic_mode in {"local", "deterministic"}:
+        gemini = IntegrationReadiness(
+            name="Semantic generator",
+            configured=True,
+            details={"Mode": "Local deterministic", "Vertex AI": "Not used"},
+        )
+    else:
+        gemini = IntegrationReadiness(
+            name="Gemini (Vertex AI)",
+            configured=bool(project),
+            details={"Project": project or "Not set", "Model": model, "Location": location},
+            missing_variables=("GOOGLE_CLOUD_PROJECT",) if not project else (),
+        )
 
     public_key = values.get("LANGFUSE_PUBLIC_KEY", "").strip()
     secret_key = values.get("LANGFUSE_SECRET_KEY", "").strip()

@@ -75,6 +75,32 @@ class SemanticValueGenerator(Protocol):
         """Return exactly the requested rows, using only requested columns."""
 
 
+class LocalSemanticValueGenerator:
+    """Provide deterministic placeholder text without contacting an LLM.
+
+    This adapter keeps local demos usable when Vertex AI is intentionally not
+    configured. Structural values are still produced and validated by this
+    module; the adapter only fills the text fields that would otherwise be
+    requested from Gemini.
+    """
+
+    def generate(
+        self,
+        request: SemanticGenerationRequest,
+        *,
+        on_text: Callable[[str], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        if on_text is not None:
+            on_text("Generated deterministic local text values.")
+        return [
+            {
+                column.name: f"{request.table.name} {column.name} {row_index}"
+                for column in request.columns
+            }
+            for row_index in range(1, request.row_count + 1)
+        ]
+
+
 @dataclass(frozen=True)
 class DraftDataset:
     """A generated, session-only dataset suitable for preview."""
